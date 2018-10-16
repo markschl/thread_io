@@ -1,4 +1,4 @@
-//! Wrap an io::Write instance in a background thread.
+//! Send data from an io::Write in the main thread to a writer in a background thread.
 
 use std::mem::replace;
 use std::io::{self, Write};
@@ -70,15 +70,15 @@ impl Write for Writer {
 }
 
 
-/// Sends `writer` to a new thread while a writer is provided within a closure
-/// in the main thread that doesn't block.
+/// Sends `writer` to a new thread and provides another writer in the main thread, which sends
+/// its data to the background.
 ///
 /// **Note**: Errors will not be returned immediately, but after `queuelen`
 /// writes, or after writing is finished and the closure ends.
 /// Also note that the last `write()` might be done **after** the closure
 /// has ended, so calling `flush` within the closure is too early.
-/// In that case, flushing (or any method for finalizing after the last
-/// write) can be called in the `finish` closure supplied to `writer_with_finish()`.
+/// In that case, flushing (or other finalizing actions) can be done in the `finish` closure
+/// supplied to `writer_with_finish()`.
 ///
 /// # Example:
 ///

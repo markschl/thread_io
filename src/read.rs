@@ -1,4 +1,4 @@
-//! Wrap an io::Read instance in a background thread.
+//! Send data from an io::Read in a background thread to a reader in the main thread.
 
 use std::mem::replace;
 use std::io::{self, Read, Write};
@@ -92,14 +92,14 @@ impl io::Read for Reader {
     }
 }
 
-/// Wraps `reader` in a background thread and provides a reader within a closure
-/// in the main thread.
+/// Wraps `reader` in a background thread and provides a reader in the main thread, which
+/// obtains data from the background reader.
 ///
 /// **Note**: Errors will not be returned immediately, but after `queuelen`
-/// reads, or after reads is finished and the closure ends. The reader in the
+/// reads, or after reading is finished and the closure ends. The reader in the
 /// background thread will stop if an error occurrs, except for errors of kind
 /// `ErrorKind::Interrupted`. In this case, reading continues in the background,
-/// although the error is still returned.
+/// but the error is still returned.
 ///
 /// # Example:
 ///
