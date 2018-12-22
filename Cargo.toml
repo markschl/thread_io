@@ -6,5 +6,8 @@ authors = ["markschl <markschl19@gmail.com>"]
 [dependencies]
 crossbeam = "0.6"
 
+[features]
+crossbeam_channel = []
+
 [profile.bench]
 lto = true

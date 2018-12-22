@@ -2,7 +2,11 @@
 
 use std::mem::replace;
 use std::io::{self, Write};
+
+#[cfg(not(feature = "crossbeam_channel"))]
 use std::sync::mpsc::{channel, Receiver, Sender};
+#[cfg(feature = "crossbeam_channel")]
+use crossbeam::channel::{unbounded as channel, Receiver, Sender};
 
 use crossbeam;
 
