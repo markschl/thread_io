@@ -182,7 +182,7 @@ where
     }
 
     crossbeam::scope(|scope| {
-        let handle = scope.spawn(move || {
+        let handle = scope.spawn(move |_| {
             let mut reader = init_reader()?;
             while let Ok(Some(mut buffer)) = empty_recv.recv() {
                 if let Err(e) = buffer.refill(&mut reader) {
@@ -213,5 +213,5 @@ where
         reader.get_errors()?;
 
         Ok(out)
-    })
+    }).unwrap()
 }

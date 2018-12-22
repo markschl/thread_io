@@ -214,7 +214,7 @@ where
     }
 
     crossbeam::scope(|scope| {
-        let handle = scope.spawn::<_, Result<_, E>>(move || {
+        let handle = scope.spawn::<_, Result<_, E>>(move |_| {
             let mut writer = init_writer()?;
 
             while let Ok(msg) = full_recv.recv() {
@@ -257,5 +257,5 @@ where
         writer.get_errors()?;
 
         Ok((out, of.unwrap()))
-    })
+    }).unwrap()
 }
