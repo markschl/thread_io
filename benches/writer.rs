@@ -17,6 +17,7 @@ fn get_data(len: usize) -> Vec<u8> {
 }
 
 static DATA_LEN: usize = 1 << 26;
+static CHUNK_SIZE: usize = 1024;
 
 macro_rules! bench {
     ($name:ident, $bufsize:expr, $queuelen:expr) => {
@@ -27,7 +28,7 @@ macro_rules! bench {
             let mut out = sink();
             b.iter(move || {
                 thread_io::write::writer($bufsize, $queuelen, &mut out, |w| {
-                    for chunk in data.chunks(1024) {
+                    for chunk in data.chunks(CHUNK_SIZE) {
                         w.write_all(chunk)?;
                     }
                     Ok::<(), ::std::io::Error>(())
@@ -46,7 +47,7 @@ macro_rules! bench_native {
             b.bytes = data.len() as u64;
             let mut out = sink();
             b.iter(move || {
-                for chunk in data.chunks(1024) {
+                for chunk in data.chunks(CHUNK_SIZE) {
                     out.write_all(chunk).expect("Write error");
                 }
             });
@@ -56,15 +57,16 @@ macro_rules! bench_native {
 
 
 
-bench!(thread_68k_3, 1024 * 68, 3);
-bench!(thread_256k_3, 1 << 18, 3);
-bench!(thread_512k_2, 1 << 19, 2);
-bench!(thread_512k_3, 1 << 19, 3);
-bench!(thread_512k_4, 1 << 19, 4);
-bench!(thread_512k_5, 1 << 19, 5);
-bench!(thread_1m_3, 1 << 20, 3);
-bench!(thread_2m_3, 1 << 21, 3);
-bench!(thread_4m_3, 1 << 22, 3);
+bench!(write_thread_68k_3, 1024 * 68, 3);
+bench!(write_thread_256k_3, 1 << 18, 3);
+bench!(write_thread_512k_2, 1 << 19, 2);
+bench!(write_thread_512k_3, 1 << 19, 3);
+bench!(write_thread_512k_4, 1 << 19, 4);
+bench!(write_thread_512k_5, 1 << 19, 5);
+bench!(write_thread_1m_3, 1 << 20, 3);
+bench!(write_thread_2m_3, 1 << 21, 3);
+bench!(write_thread_4m_3, 1 << 22, 3);
 
-bench_native!(native_256k, 1 << 18);
-bench_native!(native_1m, 1 << 20);
+bench_native!(write_native_256k, 1 << 18);
+bench_native!(write_native_512k, 1 << 19);
+bench_native!(write_native_1m, 1 << 20);
