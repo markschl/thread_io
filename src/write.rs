@@ -220,7 +220,7 @@ where
     writer_init_finish(bufsize, queuelen, init_writer, func, |_| ()).map(|(o, _)| o)
 }
 
-/// Like `writer_init()`, but with another closure that takes the writer by value
+/// Like `writer()`, but with another closure that takes the writer by value
 /// before it goes out of scope (and there is no error). Useful e.g. with encoders
 /// for compressed data that require calling a `finish` function. If the writer
 /// implements `Send`, it is also possible to return the wrapped writer back to
@@ -230,24 +230,41 @@ where
 ///
 /// ```
 /// # extern crate thread_io;
-/// use thread_io::write::writer_init_finish;
+/// use thread_io::write::writer_finish;
 /// use std::io::Write;
 ///
 /// # fn main() {
 /// let text = b"The quick brown fox jumps over the lazy dog";
-/// let output = vec![];
+/// let mut output = vec![];
 ///
-/// // `output` is moved
-/// let (_, output) = writer_init_finish(16, 2,
-///     || Ok(output),
+/// // `output` is moved to background thread
+/// let (_, output) = writer_finish(16, 2, output,
 ///     |out| out.write_all(&text[..]),
 ///     |out| out // output is returned to main thread
 /// ).expect("write failed");
 ///
-/// println!("a: {}", std::str::from_utf8(&output[..]).unwrap());
 /// assert_eq!(&output[..], &text[..]);
 /// # }
 /// ```
+pub fn writer_finish<W, F, O, F2, O2, E>(
+    bufsize: usize,
+    queuelen: usize,
+    writer: W,
+    func: F,
+    finish: F2
+) -> Result<(O, O2), E>
+where
+    F: FnOnce(&mut Writer) -> Result<O, E>,
+    W: Write + Send,
+    F2: Send + FnOnce(W) -> O2,
+    O2: Send,
+    E: Send + From<io::Error>
+{
+    writer_init_finish(bufsize, queuelen, || Ok(writer), func, finish)
+}
+
+/// This method takes both an initializing closure (see `writer_init()`) and one for finalizing
+/// and returning data back to the main thread (see `writer_finish()`).
 pub fn writer_init_finish<W, I, F, O, F2, O2, E>(
     bufsize: usize,
     queuelen: usize,
