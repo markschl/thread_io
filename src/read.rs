@@ -74,7 +74,12 @@ pub struct Reader {
 
 impl Reader {
     #[inline]
-    fn new(full_recv: Receiver<io::Result<Buffer>>, empty_send: Sender<Option<Buffer>>) -> Self {
+    fn new(full_recv: Receiver<io::Result<Buffer>>, empty_send: Sender<Option<Buffer>>, bufsize: usize, queuelen: usize) -> Self {
+
+        for _ in 0..queuelen {
+            empty_send.send(Some(Buffer::new(bufsize))).ok();
+        }
+
         Reader {
             full_recv,
             empty_send,
@@ -135,6 +140,36 @@ impl io::Read for Reader {
         rv
     }
 }
+
+
+#[derive(Debug)]
+pub struct BackgroundReader {
+    empty_recv: Receiver<Option<Buffer>>,
+    full_send: Sender<io::Result<Buffer>>,
+}
+
+impl BackgroundReader {
+    #[inline]
+    fn new(empty_recv: Receiver<Option<Buffer>>, full_send: Sender<io::Result<Buffer>>) -> Self {
+        BackgroundReader { empty_recv, full_send }
+    }
+
+    #[inline]
+    fn serve<R: Read>(&mut self, mut reader: R) {
+        while let Ok(Some(mut buffer)) = self.empty_recv.recv() {
+            match buffer.refill(&mut reader) {
+                Ok(_) => {
+                    self.full_send.send(Ok(buffer)).ok();
+                }
+                Err(e) => {
+                    self.full_send.send(Err(e)).ok();
+                    break;
+                }
+            }
+        }
+    }
+}
+
 
 /// Wraps `reader` in a background thread and provides a reader in the main thread, which
 /// obtains data from the background reader.
@@ -222,34 +257,18 @@ where
 {
     assert!(queuelen >= 1);
 
-    let (full_send, full_recv): (Sender<io::Result<Buffer>>, _) = channel();
-    let (empty_send, empty_recv): (Sender<Option<Buffer>>, _) = channel();
+    let (full_send, full_recv) = channel();
+    let (empty_send, empty_recv) = channel();
 
-    for _ in 0..queuelen {
-        empty_send.send(Some(Buffer::new(bufsize))).ok();
-    }
+    let mut reader = Reader::new(full_recv, empty_send, bufsize, queuelen);
+    let mut background_reader = BackgroundReader::new(empty_recv, full_send);
 
     crossbeam::scope(|scope| {
         let handle = scope.spawn(move |_| {
-
-            let mut reader = init_reader()?;
-
-            while let Ok(Some(mut buffer)) = empty_recv.recv() {
-                match buffer.refill(&mut reader) {
-                    Ok(_) => {
-                        full_send.send(Ok(buffer)).ok();
-                    }
-                    Err(e) => {
-                        full_send.send(Err(e)).ok();
-                        break;
-                    }
-                }
-            }
-
+            let mut inner = init_reader()?;
+            background_reader.serve(&mut inner);
             Ok::<_, E>(())
         });
-
-        let mut reader = Reader::new(full_recv, empty_send);
 
         let out = func(&mut reader)?;
 

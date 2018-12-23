@@ -26,6 +26,15 @@ pub struct Writer {
 }
 
 impl Writer {
+    #[inline]
+    fn new(empty_recv: Receiver<io::Result<Box<[u8]>>>, full_send: Sender<Message>, bufsize: usize) -> Self {
+
+        let buffer = io::Cursor::new(vec![0; bufsize].into_boxed_slice());
+
+        Writer { empty_recv, full_send, buffer}
+    }
+
+    #[inline]
     fn send_to_thread(&mut self) -> io::Result<()> {
         if let Ok(empty) = self.empty_recv.recv() {
             let full = replace(&mut self.buffer, io::Cursor::new(empty?));
@@ -38,6 +47,7 @@ impl Writer {
         Ok(())
     }
 
+    #[inline]
     fn done(&mut self) -> io::Result<()> {
         // send last buffer
         self.send_to_thread()?;
@@ -46,6 +56,7 @@ impl Writer {
     }
 
     // return errors that may still be in the queue
+    #[inline]
     fn get_errors(&self) -> io::Result<()> {
         for res in &self.empty_recv {
             res?;
@@ -55,6 +66,7 @@ impl Writer {
 }
 
 impl Write for Writer {
+
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let mut written = 0;
         while written < buffer.len() {
@@ -72,6 +84,52 @@ impl Write for Writer {
         Ok(())
     }
 }
+
+
+#[derive(Debug)]
+pub struct BackgroundWriter {
+    full_recv: Receiver<Message>,
+    empty_send: Sender<io::Result<Box<[u8]>>>,
+}
+
+impl BackgroundWriter {
+    #[inline]
+    fn new(full_recv: Receiver<Message>, empty_send: Sender<io::Result<Box<[u8]>>>, bufsize: usize, queuelen: usize) -> Self {
+        for _ in 0..queuelen {
+            empty_send
+                .send(Ok(vec![0; bufsize].into_boxed_slice()))
+                .ok();
+        }
+        BackgroundWriter { full_recv, empty_send }
+    }
+
+    #[inline]
+    fn listen<W: Write>(&mut self, mut writer: W) -> bool {
+        while let Ok(msg) = self.full_recv.recv() {
+            match msg {
+                Message::Buffer(buf) => {
+                    let pos = buf.position() as usize;
+                    let buffer = buf.into_inner();
+                    let res = writer.write_all(&buffer[..pos]);
+                    let is_err = res.is_err();
+                    self.empty_send.send(res.map(|_| buffer)).ok();
+                    if is_err {
+                        return false;
+                    }
+                }
+                Message::Flush => {
+                    if let Err(e) = writer.flush() {
+                        self.empty_send.send(Err(e)).ok();
+                        return false;
+                    }
+                }
+                Message::Done => break
+            }
+        }
+        true
+    }
+}
+
 
 
 /// Sends `writer` to a new thread and provides another writer in the main thread, which sends
@@ -208,49 +266,21 @@ where
     assert!(queuelen >= 1);
     assert!(bufsize > 0);
 
-    let (full_send, full_recv): (Sender<Message>, _) =
-        channel();
+    let (full_send, full_recv) = channel();
     let (empty_send, empty_recv) = channel();
-    for _ in 0..queuelen {
-        empty_send
-            .send(Ok(vec![0; bufsize].into_boxed_slice()))
-            .ok();
-    }
+
+    let mut writer = Writer::new(empty_recv, full_send, bufsize);
+    let mut background_writer = BackgroundWriter::new(full_recv, empty_send, bufsize, queuelen);
 
     crossbeam::scope(|scope| {
         let handle = scope.spawn::<_, Result<_, E>>(move |_| {
-            let mut writer = init_writer()?;
-
-            while let Ok(msg) = full_recv.recv() {
-                match msg {
-                    Message::Buffer(buf) => {
-                        let pos = buf.position() as usize;
-                        let buffer = buf.into_inner();
-                        let res = writer.write_all(&buffer[..pos]);
-                        let is_err = res.is_err();
-                        empty_send.send(res.map(|_| buffer)).ok();
-                        if is_err {
-                            return Ok(None);
-                        }
-                    }
-                    Message::Flush => {
-                        if let Err(e) = writer.flush() {
-                            empty_send.send(Err(e)).ok();
-                            return Ok(None);
-                        }
-                    }
-                    Message::Done => break
-                }
+            let mut inner = init_writer()?;
+            if background_writer.listen(&mut inner) {
+                // writing finished witout error
+                return Ok(Some(finish(inner)))
             }
-            // writing finished witout error
-            Ok(Some(finish(writer)))
+            Ok(None)
         });
-
-        let mut writer = Writer {
-            empty_recv: empty_recv,
-            full_send: full_send,
-            buffer: io::Cursor::new(vec![0; bufsize].into_boxed_slice()),
-        };
 
         let out = func(&mut writer)?;
 
