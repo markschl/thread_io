@@ -1,0 +1,30 @@
+
+[package]
+name = "thread_io-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies.thread_io]
+path = ".."
+[dependencies.libfuzzer-sys]
+git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+
+[profile.release]
+overflow-checks = true
+debug-assertions = true
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "read"
+path = "fuzz_targets/read.rs"
+
+[[bin]]
+name = "write"
+path = "fuzz_targets/write.rs"
