@@ -28,9 +28,9 @@ use thread_io::read::reader;
 use flate2::read::GzDecoder;
 
 // size of buffers sent across threads
-let BUF_SIZE = 256 * 1024;
+const BUF_SIZE = 256 * 1024;
 // length of queue with buffers pre-filled in background thread
-let QUEUE_LEN = 5;
+const QUEUE_LEN = 5;
 
 let f = File::open("file.txt.gz").unwrap();
 let gz = GzDecoder::new(f);
@@ -105,20 +105,20 @@ writer_finish(BUF_SIZE, QUEUE_LEN, gz_out,
 In this example, `writer.finish()` is called in a separate 'finalizing' closure,
 which supplies the `GzEncoder` object by value after all writing is done. Besides,
 there is also a standard
-[writer](https://docs.rs/thread_io/latest/thread_io/read/writer.html) method,
+[writer](https://docs.rs/thread_io/latest/thread_io/write/writer.html) method,
 which takes only one closure. However, note that even calling `flush()` on
 a writer should be done in a finalizing closure because the last write is
 often performed **after** the main closure ends.
 
 [Module documentation](https://docs.rs/thread_io/latest/thread_io/write/)
 
-### Crossbeam channels
+## Crossbeam channels
 
 It is possible to use [the channel implementation from the crossbeam crate](https://docs.rs/crossbeam/latest/crossbeam/channel/index.html)
 by specifying the `crossbeam_channel` feature. However, on my system, I haven't
 found any performance gain over using the channels from the standard library.
 
-### Similar projects
+## Similar projects
 
 [**fastq-rs**](https://github.com/aseyboldt/fastq-rs) provides a very similar
 functionality as `thread_io::read::reader` in its
