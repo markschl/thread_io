@@ -1,4 +1,4 @@
-//! Send data from an io::Read in a background thread to a reader in the main thread.
+//! This module contains functions for reading in a background thread.
 
 use std::io::{self, Read, Cursor};
 #[cfg(not(feature = "crossbeam_channel"))]
@@ -28,9 +28,8 @@ impl Buffer {
         }
     }
 
-    /// Fill the whole buffer
-    // if n_read > 0, then read() will called again, and EOF will only
-    // be returned then (assuming that read() will again return n == 0)
+    /// Fill the whole buffer, using multiple reads if necessary. This means, that upon EOF,
+    /// read may be called again once before n = 0 is returned in the main thread.
     #[inline]
     fn refill<R: Read>(&mut self, mut reader: R) -> io::Result<()> {
 
@@ -63,7 +62,7 @@ impl Buffer {
     }
 }
 
-
+/// The reader in the main thread
 #[derive(Debug)]
 pub struct Reader {
     full_recv: Receiver<io::Result<Buffer>>,
@@ -143,7 +142,7 @@ impl io::Read for Reader {
 
 
 #[derive(Debug)]
-pub struct BackgroundReader {
+struct BackgroundReader {
     empty_recv: Receiver<Option<Buffer>>,
     full_send: Sender<io::Result<Buffer>>,
 }
@@ -171,11 +170,11 @@ impl BackgroundReader {
 }
 
 
-/// Wraps `reader` in a background thread and provides a reader in the main thread, which
+/// Sends `reader` to a background thread and provides a reader in the main thread, which
 /// obtains data from the background reader.
 ///
-/// The background reader fills a buffer of a given size (`bufsize`) and submits
-/// the data to the main thread through a channel. The length of its queue can
+/// The background reader fills buffers of a given size (`bufsize`) and submits
+/// them to the main thread through a channel. The queue length of the channel can
 /// be configured using the `queuelen` parameter (must be >= 1). As a consequence,
 /// errors will not be returned immediately, but after `queuelen`
 /// reads, or after reading is finished and the closure ends. The reader in the
@@ -186,11 +185,9 @@ impl BackgroundReader {
 /// # Example:
 ///
 /// ```
-/// # extern crate thread_io;
 /// use thread_io::read::reader;
 /// use std::io::Read;
 ///
-/// # fn main() {
 /// let text = b"The quick brown fox jumps over the lazy dog";
 /// let mut target = vec![];
 ///
@@ -199,7 +196,6 @@ impl BackgroundReader {
 /// }).expect("read failed");
 ///
 /// assert_eq!(target.as_slice(), &text[..]);
-/// # }
 /// ```
 pub fn reader<R, F, O, E>(bufsize: usize, queuelen: usize, reader: R, func: F) -> Result<O, E>
 where
@@ -216,32 +212,18 @@ where
 /// # Example:
 ///
 /// ```
-/// #![feature(optin_builtin_traits)]
-/// # extern crate thread_io;
-///
 /// use thread_io::read::reader_init;
 /// use std::io::{self, Read};
 ///
-/// struct NotSendableReader<'a>(&'a [u8]);
+/// let mut input = io::stdin();
 ///
-/// impl<'a> !Send for NotSendableReader<'a> {}
-///
-/// impl<'a> Read for NotSendableReader<'a> {
-///     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-///         self.0.read(buf)
-///     }
-/// }
-///
-/// # fn main() {
-/// let text = b"The quick brown fox jumps over the lazy dog";
-/// let mut read = vec![];
-///
-/// reader_init(16, 2, || Ok(NotSendableReader(&text[..])), |rdr| {
-///     rdr.read_to_end(&mut read)
+/// // StdinLock does not implement Send
+/// reader_init(16, 2, || Ok(input.lock()), |rdr| {
+///     let mut s = String::new();
+///     let _ = rdr.read_to_string(&mut s).expect("read error");
+///     // ...
+///     Ok::<_, io::Error>(())
 /// }).expect("read failed");
-///
-/// assert_eq!(read.as_slice(), &text[..]);
-/// # }
 /// ```
 pub fn reader_init<R, I, F, O, E>(
     bufsize: usize,
@@ -256,6 +238,7 @@ where
     E: Send + From<io::Error>
 {
     assert!(queuelen >= 1);
+    assert!(bufsize > 0);
 
     let (full_send, full_recv) = channel();
     let (empty_send, empty_recv) = channel();

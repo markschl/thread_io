@@ -1,4 +1,4 @@
-//! Send data from an io::Write in the main thread to a writer in a background thread.
+//! This module contains functions for writing in a background thread.
 
 use std::mem::replace;
 use std::io::{self, Write};
@@ -18,6 +18,7 @@ enum Message {
     Done
 }
 
+/// The writer in the main thread
 #[derive(Debug)]
 pub struct Writer {
     empty_recv: Receiver<io::Result<Box<[u8]>>>,
@@ -35,7 +36,7 @@ impl Writer {
     }
 
     #[inline]
-    fn send_to_thread(&mut self) -> io::Result<()> {
+    fn send_to_background(&mut self) -> io::Result<()> {
         if let Ok(empty) = self.empty_recv.recv() {
             let full = replace(&mut self.buffer, io::Cursor::new(empty?));
             if self.full_send.send(Message::Buffer(full)).is_err() {
@@ -50,7 +51,7 @@ impl Writer {
     #[inline]
     fn done(&mut self) -> io::Result<()> {
         // send last buffer
-        self.send_to_thread()?;
+        self.send_to_background()?;
         self.full_send.send(Message::Done).ok();
         Ok(())
     }
@@ -73,7 +74,7 @@ impl Write for Writer {
             let n = self.buffer.write(&buffer[written..])?;
             written += n;
             if n == 0 {
-                self.send_to_thread()?;
+                self.send_to_background()?;
             }
         }
         Ok(written)
@@ -87,7 +88,7 @@ impl Write for Writer {
 
 
 #[derive(Debug)]
-pub struct BackgroundWriter {
+struct BackgroundWriter {
     full_recv: Receiver<Message>,
     empty_send: Sender<io::Result<Box<[u8]>>>,
 }
@@ -130,26 +131,25 @@ impl BackgroundWriter {
     }
 }
 
-
-
-/// Sends `writer` to a new thread and provides another writer in the main thread, which sends
-/// its data to the background.
+/// Sends `writer` to a background thread and provides another writer in the main thread, which
+/// then submits its data to the background writer.
 ///
-/// **Note**: Errors will not be returned immediately, but after `queuelen`
-/// writes, or after writing is finished and the closure ends.
-/// Also note that the last `write()` might be done **after** the closure
-/// has ended, so calling `flush` within the closure is too early.
-/// In that case, flushing (or other finalizing actions) can be done in the `finish` closure
-/// supplied to `writer_with_finish()`.
+/// The writer in the closure (`func`) fills buffers of a given size (`bufsize`) and submits
+/// them to the background writer through a channel. The queue length of the channel can
+/// be configured using the `queuelen` parameter (must be >= 1). As a consequence, errors will
+/// not be returned immediately, but after `queuelen` writes, or after writing is finished and
+/// the closure ends.
+///
+/// Also note that the last `write()` might be done **after** the closure has ended, calling
+/// `flush` within the closure is therefore too early. Flushing or other finalizing actions
+/// can be done in the `finish` closure supplied to `writer_finish()` or `writer_init_finish()`.
 ///
 /// # Example:
 ///
 /// ```
-/// # extern crate thread_io;
 /// use thread_io::write::writer;
 /// use std::io::Write;
 ///
-/// # fn main() {
 /// let text = b"The quick brown fox jumps over the lazy dog";
 /// let mut buf = vec![0; text.len()];
 ///
@@ -158,7 +158,6 @@ impl BackgroundWriter {
 /// }).expect("write failed");
 ///
 /// assert_eq!(&buf[..], &text[..]);
-/// # }
 /// ```
 pub fn writer<W, F, O, E>(bufsize: usize, queuelen: usize, writer: W, func: F) -> Result<O, E>
 where
@@ -169,41 +168,22 @@ where
     writer_init(bufsize, queuelen, || Ok(writer), func)
 }
 
-/// Like `writer()`, but the wrapped writer is initialized using a closure  (`init_writer`)
+/// Like `writer()`, but the wrapped writer is initialized using a closure  (`init_writer()`)
 /// in the background thread. This allows using writers that don't implement `Send`
 ///
 /// # Example:
 ///
 /// ```
-/// #![feature(optin_builtin_traits)]
-/// # extern crate thread_io;
 /// use thread_io::write::writer_init;
 /// use std::io::{self, Write};
 ///
-/// # fn main() {
 /// let text = b"The quick brown fox jumps over the lazy dog";
-/// let mut buf = vec![0; text.len()];
+/// let mut output = io::stdout();
 ///
-/// struct NotSendableWriter<'a>(&'a mut [u8]);
-///
-/// impl<'a> !Send for NotSendableWriter<'a> {}
-///
-/// impl<'a> Write for NotSendableWriter<'a> {
-///     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-///         self.0.write(buf)
-///     }
-///
-///     fn flush(&mut self) -> io::Result<()> {
-///         Ok(())
-///     }
-/// }
-///
-/// writer_init(16, 2, || Ok(NotSendableWriter(&mut buf[..])), |writer| {
+/// // StdoutLock does not implement Send
+/// writer_init(16, 2, || Ok(output.lock()), |writer| {
 ///     writer.write_all(&text[..])
 /// }).expect("write failed");
-///
-/// assert_eq!(&buf[..], &text[..]);
-/// # }
 /// ```
 pub fn writer_init<W, I, F, O, E>(
     bufsize: usize,
@@ -220,20 +200,21 @@ where
     writer_init_finish(bufsize, queuelen, init_writer, func, |_| ()).map(|(o, _)| o)
 }
 
-/// Like `writer()`, but with another closure that takes the writer by value
-/// before it goes out of scope (and there is no error). Useful e.g. with encoders
-/// for compressed data that require calling a `finish` function. If the writer
-/// implements `Send`, it is also possible to return the wrapped writer back to
-/// the main thread.
+/// Like `writer`, but accepts another closure taking the wrapped writer by value before it
+/// goes out of scope (if there is no error). Useful for performing finalizing actions such
+/// as flusing, or calling a `finish()` function, required by many encoders for compressed data.
+///
+/// If the writer implements `Send`, it is also possible to return the wrapped writer back to the
+/// main thread.
+///
+/// The output values of `func` and the `finish` closure are returned in a tuple.
 ///
 /// # Example:
 ///
 /// ```
-/// # extern crate thread_io;
 /// use thread_io::write::writer_finish;
 /// use std::io::Write;
 ///
-/// # fn main() {
 /// let text = b"The quick brown fox jumps over the lazy dog";
 /// let mut output = vec![];
 ///
@@ -244,7 +225,6 @@ where
 /// ).expect("write failed");
 ///
 /// assert_eq!(&output[..], &text[..]);
-/// # }
 /// ```
 pub fn writer_finish<W, F, O, F2, O2, E>(
     bufsize: usize,
@@ -263,8 +243,10 @@ where
     writer_init_finish(bufsize, queuelen, || Ok(writer), func, finish)
 }
 
-/// This method takes both an initializing closure (see `writer_init()`) and one for finalizing
-/// and returning data back to the main thread (see `writer_finish()`).
+/// This method takes both an initializing closure (see `writer_init`) and one for finalizing
+/// and returning data back to the main thread (see `writer_finish`).alloc
+///
+/// The output values of `func` and the `finish` closure are returned as a tuple.
 pub fn writer_init_finish<W, I, F, O, F2, O2, E>(
     bufsize: usize,
     queuelen: usize,
