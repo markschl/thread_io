@@ -1,7 +1,7 @@
 # thread_io
 
 [![docs.rs](https://docs.rs/thread_io/badge.svg)](https://docs.rs/thread_io/latest/thread_io)
-[![crates.io](https://img.shields.io/crates/v/seq_io.svg)](https://crates.io/crates/thread_io)
+[![crates.io](https://img.shields.io/crates/v/thread_io.svg)](https://crates.io/crates/thread_io)
 [![build status](https://api.travis-ci.org/markschl/thread_io.svg?branch=master)](https://travis-ci.org/markschl/thread_io)
 
 This crate allows to easily wrap readers and writers in a background thread.
