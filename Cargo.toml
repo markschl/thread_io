@@ -1,13 +1,16 @@
 [package]
 name = "thread_io"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["markschl <markschl19@gmail.com>"]
+description = "Crate for performing I/O in background thread"
+license = "MIT"
+repository = "https://github.com/markschl/thread_io"
+documentation = "https://docs.rs/thread_io"
+readme = "README.md"
+keywords = ["io", "thread", "concurrency"]
 
 [dependencies]
 crossbeam = "0.6"
 
 [features]
 crossbeam_channel = []
-
-[profile.bench]
-lto = true
