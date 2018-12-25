@@ -1,5 +1,9 @@
 # thread_io
 
+[![docs.rs](https://docs.rs/thread_io/badge.svg)](https://docs.rs/thread_io/latest/thread_io)
+[![build status](https://api.travis-ci.org/markschl/thread_io.svg?branch=master)](https://travis-ci.org/markschl/thread_io)
+
+
 This crate allows to easily wrap readers and writers in a background thread.
 This can be useful e.g. with readers and writers for compression formats to reduce load on the
 main thread.
