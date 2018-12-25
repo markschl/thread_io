@@ -4,8 +4,7 @@
 extern crate test;
 extern crate thread_io;
 
-use std::io::{Read, Cursor, ErrorKind};
-
+use std::io::{Cursor, ErrorKind, Read};
 
 fn get_data(len: usize) -> Vec<u8> {
     b"The quick brown fox jumps over the lazy dog"
@@ -17,7 +16,6 @@ fn get_data(len: usize) -> Vec<u8> {
 }
 
 static DATA_LEN: usize = 1 << 26;
-
 
 macro_rules! bench {
     ($name:ident, $bufsize:expr, $queuelen:expr) => {
@@ -38,11 +36,11 @@ macro_rules! bench {
                         }
                     }
                     Ok(())
-                }).unwrap();
-
+                })
+                .unwrap();
             });
         }
-     };
+    };
 }
 
 macro_rules! bench_native {
@@ -67,8 +65,6 @@ macro_rules! bench_native {
         }
     };
 }
-
-
 
 bench!(read_thread_32k_2, 1 << 15, 2);
 bench!(read_thread_64k_2, 1 << 16, 2);

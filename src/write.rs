@@ -1,21 +1,20 @@
 //! This module contains functions for writing in a background thread.
 
-use std::mem::replace;
 use std::io::{self, Write};
+use std::mem::replace;
 
-#[cfg(not(feature = "crossbeam_channel"))]
-use std::sync::mpsc::{channel, Receiver, Sender};
 #[cfg(feature = "crossbeam_channel")]
 use crossbeam::channel::{unbounded as channel, Receiver, Sender};
+#[cfg(not(feature = "crossbeam_channel"))]
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crossbeam;
-
 
 #[derive(Debug)]
 enum Message {
     Buffer(io::Cursor<Box<[u8]>>),
     Flush,
-    Done
+    Done,
 }
 
 /// The writer in the main thread
@@ -28,11 +27,18 @@ pub struct Writer {
 
 impl Writer {
     #[inline]
-    fn new(empty_recv: Receiver<io::Result<Box<[u8]>>>, full_send: Sender<Message>, bufsize: usize) -> Self {
-
+    fn new(
+        empty_recv: Receiver<io::Result<Box<[u8]>>>,
+        full_send: Sender<Message>,
+        bufsize: usize,
+    ) -> Self {
         let buffer = io::Cursor::new(vec![0; bufsize].into_boxed_slice());
 
-        Writer { empty_recv, full_send, buffer}
+        Writer {
+            empty_recv,
+            full_send,
+            buffer,
+        }
     }
 
     #[inline]
@@ -67,7 +73,6 @@ impl Writer {
 }
 
 impl Write for Writer {
-
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let mut written = 0;
         while written < buffer.len() {
@@ -86,7 +91,6 @@ impl Write for Writer {
     }
 }
 
-
 #[derive(Debug)]
 struct BackgroundWriter {
     full_recv: Receiver<Message>,
@@ -95,13 +99,21 @@ struct BackgroundWriter {
 
 impl BackgroundWriter {
     #[inline]
-    fn new(full_recv: Receiver<Message>, empty_send: Sender<io::Result<Box<[u8]>>>, bufsize: usize, queuelen: usize) -> Self {
+    fn new(
+        full_recv: Receiver<Message>,
+        empty_send: Sender<io::Result<Box<[u8]>>>,
+        bufsize: usize,
+        queuelen: usize,
+    ) -> Self {
         for _ in 0..queuelen {
             empty_send
                 .send(Ok(vec![0; bufsize].into_boxed_slice()))
                 .ok();
         }
-        BackgroundWriter { full_recv, empty_send }
+        BackgroundWriter {
+            full_recv,
+            empty_send,
+        }
     }
 
     #[inline]
@@ -124,7 +136,7 @@ impl BackgroundWriter {
                         return false;
                     }
                 }
-                Message::Done => break
+                Message::Done => break,
             }
         }
         true
@@ -163,7 +175,7 @@ pub fn writer<W, F, O, E>(bufsize: usize, queuelen: usize, writer: W, func: F) -
 where
     F: FnOnce(&mut Writer) -> Result<O, E>,
     W: Write + Send,
-    E: Send + From<io::Error>
+    E: Send + From<io::Error>,
 {
     writer_init(bufsize, queuelen, || Ok(writer), func)
 }
@@ -195,7 +207,7 @@ where
     I: Send + FnOnce() -> Result<W, E>,
     F: FnOnce(&mut Writer) -> Result<O, E>,
     W: Write,
-    E: Send + From<io::Error>
+    E: Send + From<io::Error>,
 {
     writer_init_finish(bufsize, queuelen, init_writer, func, |_| ()).map(|(o, _)| o)
 }
@@ -231,14 +243,14 @@ pub fn writer_finish<W, F, O, F2, O2, E>(
     queuelen: usize,
     writer: W,
     func: F,
-    finish: F2
+    finish: F2,
 ) -> Result<(O, O2), E>
 where
     F: FnOnce(&mut Writer) -> Result<O, E>,
     W: Write + Send,
     F2: Send + FnOnce(W) -> O2,
     O2: Send,
-    E: Send + From<io::Error>
+    E: Send + From<io::Error>,
 {
     writer_init_finish(bufsize, queuelen, || Ok(writer), func, finish)
 }
@@ -252,7 +264,7 @@ pub fn writer_init_finish<W, I, F, O, F2, O2, E>(
     queuelen: usize,
     init_writer: I,
     func: F,
-    finish: F2
+    finish: F2,
 ) -> Result<(O, O2), E>
 where
     I: Send + FnOnce() -> Result<W, E>,
@@ -260,7 +272,7 @@ where
     W: Write,
     F2: Send + FnOnce(W) -> O2,
     O2: Send,
-    E: Send + From<io::Error>
+    E: Send + From<io::Error>,
 {
     assert!(queuelen >= 1);
     assert!(bufsize > 0);
@@ -276,7 +288,7 @@ where
             let mut inner = init_writer()?;
             if background_writer.listen(&mut inner) {
                 // writing finished witout error
-                return Ok(Some(finish(inner)))
+                return Ok(Some(finish(inner)));
             }
             Ok(None)
         });
@@ -290,5 +302,6 @@ where
         writer.get_errors()?;
 
         Ok((out, of.unwrap()))
-    }).unwrap()
+    })
+    .unwrap()
 }

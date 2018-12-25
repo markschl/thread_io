@@ -1,8 +1,8 @@
 extern crate thread_io;
 
-use thread_io::write::*;
-use std::io::{Write,self};
 use std::cmp::min;
+use std::io::{self, Write};
+use thread_io::write::*;
 
 /// a writer that only writes its data to `Writer::data` upon `flush()`
 #[derive(Clone)]
@@ -33,7 +33,7 @@ impl Writer {
 impl Write for Writer {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         if self.write_fails {
-            return Err(io::Error::new(io::ErrorKind::Other, "write err"))
+            return Err(io::Error::new(io::ErrorKind::Other, "write err"));
         }
         self.cache.write(&buffer[..min(buffer.len(), self.bufsize)])
     }
@@ -58,21 +58,30 @@ fn write_thread() {
         for writer_bufsize in 1..len {
             for queuelen in 1..len {
                 // Test the writer: write without flushing, which should result in empty output
-                let mut w = writer_init_finish(channel_bufsize, queuelen,
+                let mut w = writer_init_finish(
+                    channel_bufsize,
+                    queuelen,
                     || Ok(Writer::new(false, false, writer_bufsize)),
                     |w| w.write(text),
-                    |w| w
-                ).unwrap().1;
+                    |w| w,
+                )
+                .unwrap()
+                .1;
                 assert_eq!(w.data(), b"");
 
                 // Write with flushing: the output should be equal to the written data
-                let mut w = writer_init_finish(channel_bufsize, queuelen,
+                let mut w = writer_init_finish(
+                    channel_bufsize,
+                    queuelen,
                     || Ok(Writer::new(false, false, writer_bufsize)),
                     |w| w.write(text),
                     |mut w| {
                         w.flush().unwrap();
                         w
-                    }).unwrap().1;
+                    },
+                )
+                .unwrap()
+                .1;
                 if w.data() != &text[..] {
                     panic!(format!(
                         "write test failed: {:?} != {:?} at channel buffer size {}, writer bufsize {}, queue length {}",
@@ -97,7 +106,7 @@ fn write_thread() {
 #[test]
 fn writer_init_fail() {
     let e = io::Error::new(io::ErrorKind::Other, "init err");
-    let res = writer_init(5, 2, || Err::<&mut [u8], _>(e), |_| {Ok(())});
+    let res = writer_init(5, 2, || Err::<&mut [u8], _>(e), |_| Ok(()));
     if let Err(e) = res {
         assert_eq!(&format!("{}", e), "init err");
     } else {

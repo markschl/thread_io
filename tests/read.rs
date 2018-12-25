@@ -1,15 +1,15 @@
 extern crate thread_io;
 
-use thread_io::read::*;
-use std::io::{Read,self};
 use std::cmp::min;
+use std::io::{self, Read};
+use thread_io::read::*;
 
 struct Reader<'a> {
     data: &'a [u8],
     block_size: usize,
     // used to test what happens to errors that are
     // stuck in the queue
-    fails_after: usize
+    fails_after: usize,
 }
 
 impl<'a> Reader<'a> {
@@ -17,7 +17,7 @@ impl<'a> Reader<'a> {
         Reader {
             data: data,
             block_size: block_size,
-            fails_after: fails_after
+            fails_after: fails_after,
         }
     }
 }
@@ -66,7 +66,10 @@ fn read() {
 
                     // test threaded reader
                     let mut rdr = Reader::new(text, rdr_block_size, ::std::usize::MAX);
-                    let out = reader(channel_bufsize, queuelen, rdr, |r| read_chunks(r, out_bufsize)).unwrap();
+                    let out = reader(channel_bufsize, queuelen, rdr, |r| {
+                        read_chunks(r, out_bufsize)
+                    })
+                    .unwrap();
 
                     if out.as_slice() != &text[..] {
                         panic!(format!(
@@ -80,7 +83,6 @@ fn read() {
     }
 }
 
-
 #[test]
 fn read_fail() {
     let text = b"The quick brown fox";
@@ -91,8 +93,7 @@ fn read_fail() {
             let mut out = vec![0];
             let mut rdr = Reader::new(text, channel_bufsize, len / channel_bufsize);
             let res: io::Result<_> = reader(channel_bufsize, queuelen, rdr, |r| {
-                while r.read(&mut out)? > 0 {
-                }
+                while r.read(&mut out)? > 0 {}
                 Ok(())
             });
 
@@ -111,7 +112,7 @@ fn read_fail() {
 #[test]
 fn reader_init_fail() {
     let e = io::Error::new(io::ErrorKind::Other, "init err");
-    let res = reader_init(5, 2, || Err::<&[u8], _>(e), |_| {Ok(())});
+    let res = reader_init(5, 2, || Err::<&[u8], _>(e), |_| Ok(()));
     if let Err(e) = res {
         assert_eq!(&format!("{}", e), "init err");
     } else {

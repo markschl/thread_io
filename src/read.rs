@@ -1,13 +1,12 @@
 //! This module contains functions for reading in a background thread.
 
-use std::io::{self, Read, Cursor};
-#[cfg(not(feature = "crossbeam_channel"))]
-use std::sync::mpsc::{channel, Receiver, Sender};
 #[cfg(feature = "crossbeam_channel")]
 use crossbeam::channel::{unbounded as channel, Receiver, Sender};
+use std::io::{self, Cursor, Read};
+#[cfg(not(feature = "crossbeam_channel"))]
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crossbeam;
-
 
 #[derive(Debug)]
 struct Buffer {
@@ -32,7 +31,6 @@ impl Buffer {
     /// read may be called again once before n = 0 is returned in the main thread.
     #[inline]
     fn refill<R: Read>(&mut self, mut reader: R) -> io::Result<()> {
-
         let mut n_read = 0;
         let mut buf = &mut *self.data;
         self.interrupted = false;
@@ -73,8 +71,12 @@ pub struct Reader {
 
 impl Reader {
     #[inline]
-    fn new(full_recv: Receiver<io::Result<Buffer>>, empty_send: Sender<Option<Buffer>>, bufsize: usize, queuelen: usize) -> Self {
-
+    fn new(
+        full_recv: Receiver<io::Result<Buffer>>,
+        empty_send: Sender<Option<Buffer>>,
+        bufsize: usize,
+        queuelen: usize,
+    ) -> Self {
         for _ in 0..queuelen {
             empty_send.send(Some(Buffer::new(bufsize))).ok();
         }
@@ -107,14 +109,15 @@ impl Reader {
     // here due to borrow checker)
     #[inline]
     fn _read(&mut self, buf: &mut [u8]) -> (io::Result<usize>, bool) {
-
         let source = self.buffer.as_mut().unwrap();
 
         if source.interrupted && self.pos == source.end {
             return (Err(io::Error::from(io::ErrorKind::Interrupted)), true);
         }
 
-        let n = Cursor::new(&source.data[self.pos..source.end]).read(buf).unwrap();
+        let n = Cursor::new(&source.data[self.pos..source.end])
+            .read(buf)
+            .unwrap();
         self.pos += n;
 
         (Ok(n), self.pos == source.end && !source.interrupted)
@@ -122,9 +125,7 @@ impl Reader {
 }
 
 impl io::Read for Reader {
-
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-
         if self.buffer.is_none() {
             self.buffer = Some(self.full_recv.recv().ok().unwrap()?);
         }
@@ -140,7 +141,6 @@ impl io::Read for Reader {
     }
 }
 
-
 #[derive(Debug)]
 struct BackgroundReader {
     empty_recv: Receiver<Option<Buffer>>,
@@ -150,7 +150,10 @@ struct BackgroundReader {
 impl BackgroundReader {
     #[inline]
     fn new(empty_recv: Receiver<Option<Buffer>>, full_send: Sender<io::Result<Buffer>>) -> Self {
-        BackgroundReader { empty_recv, full_send }
+        BackgroundReader {
+            empty_recv,
+            full_send,
+        }
     }
 
     #[inline]
@@ -168,7 +171,6 @@ impl BackgroundReader {
         }
     }
 }
-
 
 /// Sends `reader` to a background thread and provides a reader in the main thread, which
 /// obtains data from the background reader.
@@ -201,7 +203,7 @@ pub fn reader<R, F, O, E>(bufsize: usize, queuelen: usize, reader: R, func: F) -
 where
     F: FnOnce(&mut Reader) -> Result<O, E>,
     R: io::Read + Send,
-    E: Send + From<io::Error>
+    E: Send + From<io::Error>,
 {
     reader_init(bufsize, queuelen, || Ok(reader), func)
 }
@@ -235,7 +237,7 @@ where
     I: Send + FnOnce() -> Result<R, E>,
     F: FnOnce(&mut Reader) -> Result<O, E>,
     R: io::Read,
-    E: Send + From<io::Error>
+    E: Send + From<io::Error>,
 {
     assert!(queuelen >= 1);
     assert!(bufsize > 0);
@@ -262,5 +264,6 @@ where
         reader.get_errors()?;
 
         Ok(out)
-    }).unwrap()
+    })
+    .unwrap()
 }

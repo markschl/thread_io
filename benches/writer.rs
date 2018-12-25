@@ -4,8 +4,7 @@
 extern crate test;
 extern crate thread_io;
 
-use std::io::{sink,Write};
-
+use std::io::{sink, Write};
 
 fn get_data(len: usize) -> Vec<u8> {
     b"The quick brown fox jumps over the lazy dog"
@@ -32,11 +31,11 @@ macro_rules! bench {
                         w.write_all(chunk)?;
                     }
                     Ok::<(), ::std::io::Error>(())
-                }).unwrap();
-
+                })
+                .unwrap();
             });
         }
-     };
+    };
 }
 
 macro_rules! bench_native {
@@ -52,10 +51,8 @@ macro_rules! bench_native {
                 }
             });
         }
-     };
+    };
 }
-
-
 
 bench!(write_thread_68k_3, 1024 * 68, 3);
 bench!(write_thread_256k_3, 1 << 18, 3);
