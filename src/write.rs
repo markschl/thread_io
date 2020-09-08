@@ -48,10 +48,13 @@ impl Writer {
             if self.full_send.send(Message::Buffer(full)).is_err() {
                 self.get_errors()?;
             }
+            Ok(())
         } else {
             self.get_errors()?;
+            // If we reach this point, we couldn't communicate with the background writer
+            // but there were no errors recorded in the queue. BrokenPipe seems to closest error to return.
+            Err(io::Error::from(io::ErrorKind::BrokenPipe))
         }
-        Ok(())
     }
 
     #[inline]
@@ -293,12 +296,21 @@ where
             Ok(None)
         });
 
-        let out = func(&mut writer)?;
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| func(&mut writer)));
 
-        writer.done()?;
+        let writer_result = writer.done();
 
-        let of = handle.join().unwrap()?;
+        let handle = handle.join();
 
+        // Prefer errors from the background thread. This doesn't include actual I/O errors from the writing
+        // because those are sent via the channel to the main thread. Instead, it returns errors from init_writer
+        // or panics from the writing thread. If either of those happen, writing in the main thread will fail
+        // but we want to return the underlying reason.
+        let of = crate::unwrap_or_resume_unwind(handle)?;
+        let out = crate::unwrap_or_resume_unwind(out)?;
+
+        // Report write errors that happened after the main thread stopped writing.
+        writer_result?;
         writer.get_errors()?;
 
         Ok((out, of.unwrap()))

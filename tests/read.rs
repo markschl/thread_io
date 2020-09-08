@@ -10,14 +10,16 @@ struct Reader<'a> {
     // used to test what happens to errors that are
     // stuck in the queue
     fails_after: usize,
+    panic: bool,
 }
 
 impl<'a> Reader<'a> {
-    fn new(data: &'a [u8], block_size: usize, fails_after: usize) -> Reader {
+    fn new(data: &'a [u8], block_size: usize, fails_after: usize, panic: bool) -> Reader {
         Reader {
             data: data,
             block_size: block_size,
             fails_after: fails_after,
+            panic: panic,
         }
     }
 }
@@ -25,7 +27,11 @@ impl<'a> Reader<'a> {
 impl<'a> Read for Reader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.fails_after == 0 {
-            return Err(io::Error::new(io::ErrorKind::Other, "read err"));
+            if self.panic {
+                panic!("read err");
+            } else {
+                return Err(io::Error::new(io::ErrorKind::Other, "read err"));
+            }
         }
         self.fails_after -= 1;
         let amt = min(self.data.len(), min(buf.len(), self.block_size));
@@ -61,11 +67,11 @@ fn read() {
             for out_bufsize in 1..len {
                 for queuelen in 1..len {
                     // test the mock reader itself
-                    let mut rdr = Reader::new(text, rdr_block_size, ::std::usize::MAX);
+                    let rdr = Reader::new(text, rdr_block_size, ::std::usize::MAX, false);
                     assert_eq!(read_chunks(rdr, out_bufsize).unwrap().as_slice(), &text[..]);
 
                     // test threaded reader
-                    let mut rdr = Reader::new(text, rdr_block_size, ::std::usize::MAX);
+                    let rdr = Reader::new(text, rdr_block_size, ::std::usize::MAX, false);
                     let out = reader(channel_bufsize, queuelen, rdr, |r| {
                         read_chunks(r, out_bufsize)
                     })
@@ -91,7 +97,7 @@ fn read_fail() {
     for channel_bufsize in 1..len {
         for queuelen in 1..len {
             let mut out = vec![0];
-            let mut rdr = Reader::new(text, channel_bufsize, len / channel_bufsize);
+            let rdr = Reader::new(text, channel_bufsize, len / channel_bufsize, false);
             let res: io::Result<_> = reader(channel_bufsize, queuelen, rdr, |r| {
                 while r.read(&mut out)? > 0 {}
                 Ok(())
@@ -110,9 +116,51 @@ fn read_fail() {
 }
 
 #[test]
+#[should_panic(expected = "read err")]
+fn read_panic() {
+    let text = b"The quick brown fox";
+    let rdr = Reader::new(text, 1, 1, true);
+    let _res: io::Result<_> = reader(1, 1, rdr, |r| {
+        r.read_to_end(&mut Vec::new())?;
+        Ok(())
+    });
+}
+
+#[test]
+fn read_fail_processing() {
+    let text = b"The quick brown fox";
+
+    let rdr = Reader::new(text, 1, 1, false);
+    let res: Result<(), &'static str> = reader(1, 1, rdr, |_r| Err("gave up"));
+
+    if let Err(e) = res {
+        assert_eq!(&format!("{}", e), "gave up");
+    } else {
+        panic!("read should fail");
+    }
+}
+
+#[test]
+#[should_panic(expected = "gave up")]
+fn read_panic_processing() {
+    let text = b"The quick brown fox";
+
+    let rdr = Reader::new(text, 1, 1, false);
+    let _res: Result<(), &'static str> = reader(1, 1, rdr, |_r| panic!("gave up"));
+}
+
+#[test]
 fn reader_init_fail() {
     let e = io::Error::new(io::ErrorKind::Other, "init err");
-    let res = reader_init(5, 2, || Err::<&[u8], _>(e), |_| Ok(()));
+    let res = reader_init(
+        5,
+        2,
+        || Err::<&[u8], _>(e),
+        |reader| {
+            reader.read_to_end(&mut Vec::new())?;
+            Ok(())
+        },
+    );
     if let Err(e) = res {
         assert_eq!(&format!("{}", e), "init err");
     } else {
