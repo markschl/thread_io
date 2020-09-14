@@ -58,7 +58,7 @@ fn write_thread() {
         for writer_bufsize in 1..len {
             for queuelen in 1..len {
                 // Test the writer: write without flushing, which should result in empty output
-                let mut w = writer_init_finish(
+                let w = writer_init_finish(
                     channel_bufsize,
                     queuelen,
                     || Ok(Writer::new(false, false, writer_bufsize)),
@@ -106,7 +106,15 @@ fn write_thread() {
 #[test]
 fn writer_init_fail() {
     let e = io::Error::new(io::ErrorKind::Other, "init err");
-    let res = writer_init(5, 2, || Err::<&mut [u8], _>(e), |_| Ok(()));
+    let res = writer_init(
+        5,
+        2,
+        || Err::<&mut [u8], _>(e),
+        |writer| {
+            writer.write(b"let the cows come home")?;
+            Ok(())
+        },
+    );
     if let Err(e) = res {
         assert_eq!(&format!("{}", e), "init err");
     } else {
@@ -123,7 +131,7 @@ fn write_fail() {
         for writer_bufsize in 1..len {
             for queuelen in 1..len {
                 let w = Writer::new(true, false, writer_bufsize);
-                let res = writer(channel_bufsize, queuelen, w, |w| w.write(text));
+                let res = writer(channel_bufsize, queuelen, w, |w| w.write_all(text));
                 if let Err(e) = res {
                     assert_eq!(&format!("{}", e), "write err");
                 } else {
@@ -140,4 +148,25 @@ fn write_fail() {
             }
         }
     }
+}
+
+#[test]
+fn write_source_fail() {
+    let w = Writer::new(true, false, 1);
+    let res: std::io::Result<()> = writer(1, 1, w, |_w| {
+        Err(std::io::Error::from(std::io::ErrorKind::AddrInUse))
+    });
+
+    if let Err(e) = res {
+        assert_eq!(e.kind(), std::io::ErrorKind::AddrInUse);
+    } else {
+        panic!("expected error")
+    }
+}
+
+#[test]
+#[should_panic(expected = "all out of bubblegum")]
+fn write_source_panic() {
+    let w = Writer::new(true, false, 1);
+    let _res: std::io::Result<()> = writer(1, 1, w, |_w| panic!("all out of bubblegum"));
 }

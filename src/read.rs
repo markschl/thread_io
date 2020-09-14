@@ -94,16 +94,6 @@ impl Reader {
         self.empty_send.send(None).ok();
     }
 
-    /// return errors that may still be in the queue. This is still possible even if the
-    /// sender was dropped, as they are in the queue buffer (see docs for std::mpsc::Receiver::recv).
-    #[inline]
-    fn get_errors(&self) -> io::Result<()> {
-        for res in &self.full_recv {
-            res?;
-        }
-        Ok(())
-    }
-
     // assumes that self.buffer is not None. Returns a tuple of the read result
     // and a flag indicating if a new buffer should be received (cannot be done
     // here due to borrow checker)
@@ -203,7 +193,7 @@ pub fn reader<R, F, O, E>(bufsize: usize, queuelen: usize, reader: R, func: F) -
 where
     F: FnOnce(&mut Reader) -> Result<O, E>,
     R: io::Read + Send,
-    E: Send + From<io::Error>,
+    E: Send,
 {
     reader_init(bufsize, queuelen, || Ok(reader), func)
 }
@@ -237,7 +227,7 @@ where
     I: Send + FnOnce() -> Result<R, E>,
     F: FnOnce(&mut Reader) -> Result<O, E>,
     R: io::Read,
-    E: Send + From<io::Error>,
+    E: Send,
 {
     assert!(queuelen >= 1);
     assert!(bufsize > 0);
@@ -255,15 +245,17 @@ where
             Ok::<_, E>(())
         });
 
-        let out = func(&mut reader)?;
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| func(&mut reader)));
 
         reader.done();
 
-        handle.join().unwrap()?;
-
-        reader.get_errors()?;
-
-        Ok(out)
+        // We deliberately ensure that errors from the background reading thread are given priority.
+        // This does NOT include errors returned from the actual I/O which are returned via the channels
+        // To the reader. It includes errors returned by init_reader() and panics that occured while reading.
+        // Either of those cases will have cause the reader to be in an unworkable state. Consequently, we want to
+        // surface the error that caused this.
+        crate::unwrap_or_resume_unwind(handle.join())?;
+        crate::unwrap_or_resume_unwind(out)
     })
     .unwrap()
 }
