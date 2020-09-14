@@ -1,18 +1,18 @@
 
 [package]
 name = "thread_io-fuzz"
-version = "0.0.1"
-authors = ["Automatically generated"]
+version = "0.2"
+authors = ["markschl <markschl19@gmail.com>"]
 publish = false
 edition = "2018"
 
 [package.metadata]
 cargo-fuzz = true
 
-[dependencies.thread_io]
-path = ".."
-[dependencies.libfuzzer-sys]
-git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+[dependencies]
+thread_io = { path = ".." }
+libfuzzer-sys = { version = "0.3", features = ["arbitrary-derive"] }
+arbitrary = { version = "0.4", features = ["derive"] }
 
 [profile.release]
 overflow-checks = true

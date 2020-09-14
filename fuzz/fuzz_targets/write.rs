@@ -1,36 +1,46 @@
 #![no_main]
-#[macro_use] extern crate libfuzzer_sys;
 
 use std::io::{self, Write};
 use std::cmp::{min, max};
+use libfuzzer_sys::fuzz_target;
+use libfuzzer_sys::arbitrary::Arbitrary;
+
+#[derive(Arbitrary, Debug)]
+pub struct Config {
+    channel_bufsize: u16,
+    queuelen: u8,
+    writer_bufsize: u16,
+    data: Vec<u8>,
+}
 
 // runs the thread_io::read::reader using different buffer sizes and queue lengths
 // using a mock reader (as in tests::read, but more variables are changed randomly) to ensure that
-// the returned data will always be the same
-fuzz_target!(|data: &[u8]| {
-    if data.len() < 4 {
-        return;
-    }
-    //println!("{:?}", data);
-    let (channel_bufsize, data) = data.split_first().unwrap();
-    let channel_bufsize = max(1, *channel_bufsize as usize / 4);
-    let (queuelen, data) = data.split_first().unwrap();
-    let queuelen = max(1, *queuelen as usize / 4);
-    // size of buffer we are writing into in main thread
-    let (writer_bufsize, data) = data.split_first().unwrap();
-    let writer_bufsize = max(1, *writer_bufsize as usize / 4);
+// the returned cfg.data will always be the same
+fuzz_target!(|cfg: Config| {
+    //println!("{:?}", cfg);
+    let mut cfg = cfg;
+    cfg.channel_bufsize = max(1, cfg.channel_bufsize);
+    cfg.queuelen = max(1, cfg.queuelen);
+    cfg.writer_bufsize = max(1, cfg.writer_bufsize);
 
     // Test writer
-    let w = thread_io::write::writer_finish(channel_bufsize, queuelen,
-        Writer::new(false, false, writer_bufsize),
-        |w| w.write(data),
+    let w = thread_io::write::writer_finish(
+        cfg.channel_bufsize as usize, 
+        cfg.queuelen as usize,
+        Writer::new(false, false, cfg.writer_bufsize as usize),
+        |w| w.write(&cfg.data),
         |w| w
     ).unwrap().1;
-    assert_eq!(w.data(), &data[..]);
+    assert_eq!(w.data(), cfg.data.as_slice());
 
     // Test case in which write fails
-    let w = Writer::new(true, false, writer_bufsize);
-    let res = thread_io::write::writer(channel_bufsize, queuelen, w, |w| w.write(data));
+    let w = Writer::new(true, false, cfg.writer_bufsize as usize);
+    let res = thread_io::write::writer(
+        cfg.channel_bufsize as usize, 
+        cfg.queuelen as usize, 
+        w, 
+        |w| w.write(&cfg.data)
+    );
     if let Err(e) = res {
         assert_eq!(&format!("{}", e), "write err");
     } else {
@@ -38,8 +48,13 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // Test case in which flushing fails
-    let w = Writer::new(false, true, writer_bufsize);
-    let res = thread_io::write::writer(channel_bufsize, queuelen, w, |w| w.flush());
+    let w = Writer::new(false, true, cfg.writer_bufsize as usize);
+    let res = thread_io::write::writer(
+        cfg.channel_bufsize as usize, 
+        cfg.queuelen as usize, 
+        w, 
+        |w| w.flush()
+    );
     if let Err(e) = res {
         assert_eq!(&format!("{}", e), "flush err");
     } else {
@@ -47,7 +62,7 @@ fuzz_target!(|data: &[u8]| {
     }
 });
 
-/// a writer that only writes its data to `Writer::data` upon `flush()`
+/// a writer that only writes its cfg.data to `Writer::cfg.data` upon `flush()`
 #[derive(Clone)]
 struct Writer {
     cache: Vec<u8>,

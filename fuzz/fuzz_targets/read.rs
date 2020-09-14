@@ -1,59 +1,54 @@
 #![no_main]
-#[macro_use] extern crate libfuzzer_sys;
 
 use std::io::{self, Read};
 use std::cmp::{min, max};
+use libfuzzer_sys::fuzz_target;
+use libfuzzer_sys::arbitrary::Arbitrary;
+
+#[derive(Arbitrary, Debug)]
+pub struct Config {
+    channel_bufsize: u16,
+    queuelen: u8,
+    out_bufsize: u16,
+    data_len: u16,
+    // The list of reads to be done:
+    // - 0 means ErrorKind::Interrupted
+    // - > 0 means n bytes will be read into target buffer
+    chunk_sizes: Vec<u8>,
+}
 
 // runs the thread_io::read::reader using different buffer sizes and queue lengths
 // using a mock reader (as in tests::read, but more variables are changed randomly) to ensure that
 // the returned data will always be the same
-fuzz_target!(|data: &[u8]| {
-    if data.len() < 4 {
-        return;
-    }
-    //println!("{:?}", data);
-    let (channel_bufsize, data) = data.split_first().unwrap();
-    let channel_bufsize = max(1, *channel_bufsize as usize / 4);
-    let (queuelen, data) = data.split_first().unwrap();
-    let queuelen = max(1, *queuelen as usize / 4);
-    // size of buffer we are reading into in main thread
-    let (out_bufsize, mut data) = data.split_first().unwrap();
-    let out_bufsize = max(1, *out_bufsize as usize / 4);
+fuzz_target!(|cfg: Config| {
+    //println!("{:?}", cfg);
+    let mut cfg = cfg;
+    cfg.channel_bufsize = max(1, cfg.channel_bufsize);
+    cfg.queuelen = max(1, cfg.queuelen);
+    cfg.out_bufsize = max(1, cfg.out_bufsize);
 
-    // determine sizes of chunks being read by mock reader wrapped in thread
-    let mut cum_sizes = 0;
-    let mut inner_chunk_sizes = vec![];
-    while let Some((inner_chunk_size, _data)) = data.split_first() {
-        cum_sizes += *inner_chunk_size as usize;
-        data = _data;
-        if cum_sizes > data.len() {
-            break;
-        }
-        inner_chunk_sizes.push(inner_chunk_size);
-    }
-
-    if data.len() == 0 {
+    if cfg.chunk_sizes.len() == 0 {
         return;
     }
 
-    //println!("queue len: {}, channel_bufsize: {}, out_bufsize: {}, inner_chunk_sizes: {:?}, data len: {} data {:?}", queuelen, channel_bufsize, out_bufsize, inner_chunk_sizes, data.len(), data);
+    let data: Vec<u8> = (0..cfg.data_len).map(|_| 0).collect();
 
     // test the mock reader itself
-    let c = inner_chunk_sizes.iter().map(|&&c| c as usize);
-    let rdr = Reader::new(data, c, None);
-    assert_eq!(read_chunks(rdr, out_bufsize).unwrap().as_slice(), &data[..]);
+    let c = cfg.chunk_sizes.iter().map(|&c| c as usize);
+    let rdr = Reader::new(&data, c);
+    assert_eq!(read_chunks(rdr, cfg.out_bufsize as usize).unwrap(), data);
 
     // test threaded reader
-    let c = inner_chunk_sizes.iter().map(|&&c| c as usize);
-    let rdr = Reader::new(data, c, None);
+    let c = cfg.chunk_sizes.iter().map(|&c| c as usize);
+    let rdr = Reader::new(&data, c);
     let out = thread_io::read::reader(
-        channel_bufsize,
-        queuelen,
+        cfg.channel_bufsize as usize,
+        cfg.queuelen as usize,
         rdr,
-        |r| read_chunks(r, out_bufsize)
+        |r| read_chunks(r, cfg.out_bufsize as usize)
     ).unwrap();
 
-    assert_eq!(out.as_slice(), &data[..]);
+    assert_eq!(out, data);
 
 });
 
@@ -61,27 +56,19 @@ fuzz_target!(|data: &[u8]| {
 struct Reader<'a, C: Iterator<Item=usize>> {
     data: &'a [u8],
     chunk_sizes: C,
-    fails_after: Option<usize>
 }
 
 impl<'a, C: Iterator<Item=usize>> Reader<'a, C> {
-    fn new(data: &'a [u8], chunk_sizes: C, fails_after: Option<usize>) -> Self {
+    fn new(data: &'a [u8], chunk_sizes: C) -> Self {
         Reader {
             data: data,
             chunk_sizes: chunk_sizes,
-            fails_after: fails_after,
         }
     }
 }
 
 impl<'a, C: Iterator<Item=usize>> Read for Reader<'a, C> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if let Some(f) = self.fails_after.as_mut() {
-            if *f == 0 {
-                return Err(io::Error::new(io::ErrorKind::Other, "expected fail"));
-            }
-            *f -= 1;
-        }
         let chunk_size = self.chunk_sizes.next();
         if chunk_size == Some(0) {
             return Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"));
