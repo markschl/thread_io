@@ -1,21 +1,21 @@
 //! This module contains functions for reading in a background thread.
-//! 
+//!
 //! * The simplest to use is the [`reader`](fn.reader.html) function. It accepts
 //!   any `io::Read` instance that implements `Send`.
-//! * The [`reader_init`](fn.reader_init.html) function handles cases where the 
+//! * The [`reader_init`](fn.reader_init.html) function handles cases where the
 //!   wrapped reader cannot be sent safely across the thread boundary by
 //!   providing a closure for initializing the reader in the background thread.
-//! 
+//!
 //! # Error handling
-//! 
+//!
 //! * `io::Error`s occurring during reading in the background are returned by
-//!   the `read` method of the [reader in the main thread](struct.Reader.html) 
+//!   the `read` method of the [reader in the main thread](struct.Reader.html)
 //!   as expected, but with a delay of at east one call.
 //! * Reading errors cause the background reader to stop, *except* for errors
 //!   of kind `io::ErrorKind::Interrupted`. In this case reading continues in
 //!   background, allowing the user to resume reading after the error occurred.
-//! * The `func` closure running in the main thread allows returning errors of 
-//!   any  type. If a reading error happens around the same time in the 
+//! * The `func` closure running in the main thread allows returning errors of
+//!   any  type. If a reading error happens around the same time in the
 //!   background thread and does not reach the main thread due to the reporting
 //!   delay, it will be discarded and the error from `func` returned instead.
 //! * *panics* in the background reader are correctly forwarded to the main
@@ -184,12 +184,12 @@ impl BackgroundReader {
     }
 }
 
-/// Sends `reader` to a background thread and provides a reader in the main 
+/// Sends `reader` to a background thread and provides a reader in the main
 /// thread, which obtains data from the background reader.
 ///
 /// The background reader fills buffers of a given size (`bufsize`) and submits
-/// them to the main thread through a channel. The queue length of the channel 
-/// can be configured using the `queuelen` parameter (must be ≥ 1). As a 
+/// them to the main thread through a channel. The queue length of the channel
+/// can be configured using the `queuelen` parameter (must be ≥ 1). As a
 /// consequence, errors will not be returned immediately, but after some delay.
 /// The reader in the background thread will stop if an error occurs, except for
 /// errors of kind `io::ErrorKind::Interrupted`. In this case, reading continues
@@ -220,7 +220,7 @@ where
 }
 
 /// Like [`reader()`](fn.reader.html), but the wrapped reader is initialized
-/// in a closure (`init_reader`) in the background thread. This allows using 
+/// in a closure (`init_reader`) in the background thread. This allows using
 /// readers that don't implement `Send`
 ///
 /// # Example:
@@ -273,11 +273,11 @@ where
 
         // We deliberately ensure that errors from the background reading thread
         // are given priority. This does NOT include errors returned from the
-        // actual I/O which are returned via the channels to the reader. 
-        // It includes errors returned by init_reader() and panics that occured 
+        // actual I/O which are returned via the channels to the reader.
+        // It includes errors returned by init_reader() and panics that occured
         // while reading.
         // Either of those cases will have cause the reader to be in an
-        // unworkable state. Consequently, we want to surface the error that 
+        // unworkable state. Consequently, we want to surface the error that
         // caused this.
         crate::unwrap_or_resume_unwind(handle.join())?;
         crate::unwrap_or_resume_unwind(out)

@@ -15,7 +15,13 @@ struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    fn new(data: &'a [u8], block_size: usize, fails_after: Option<usize>, interrups_after: Option<usize>, panic: bool) -> Reader {
+    fn new(
+        data: &'a [u8],
+        block_size: usize,
+        fails_after: Option<usize>,
+        interrups_after: Option<usize>,
+        panic: bool,
+    ) -> Reader {
         Reader {
             data: data,
             block_size: block_size,
@@ -60,13 +66,13 @@ fn read_chunks<R: io::Read>(mut rdr: R, chunksize: usize, resume: bool) -> io::R
                 out.extend_from_slice(&buf[..n]);
                 if n == 0 {
                     break;
-                }        
+                }
             }
             Err(e) => {
                 if resume && e.kind() == io::ErrorKind::Interrupted {
                     continue;
                 }
-                return Err(e)
+                return Err(e);
             }
         }
     }
@@ -84,7 +90,10 @@ fn read() {
                 for queuelen in (1..n).step_by(2) {
                     // test the mock reader itself
                     let rdr = Reader::new(text, rdr_block_size, None, None, false);
-                    assert_eq!(read_chunks(rdr, out_bufsize, false).unwrap().as_slice(), &text[..]);
+                    assert_eq!(
+                        read_chunks(rdr, out_bufsize, false).unwrap().as_slice(),
+                        &text[..]
+                    );
 
                     // test threaded reader
                     let rdr = Reader::new(text, rdr_block_size, None, None, false);
@@ -113,7 +122,13 @@ fn read_fail() {
     for channel_bufsize in 1..len {
         for queuelen in 1..len {
             let mut out = vec![0];
-            let rdr = Reader::new(text, channel_bufsize, Some(len / channel_bufsize), None, false);
+            let rdr = Reader::new(
+                text,
+                channel_bufsize,
+                Some(len / channel_bufsize),
+                None,
+                false,
+            );
             let res: io::Result<_> = reader(channel_bufsize, queuelen, rdr, |r| {
                 while r.read(&mut out)? > 0 {}
                 Ok(())
@@ -155,7 +170,6 @@ fn read_fail_processing() {
         panic!("read should fail");
     }
 }
-
 
 #[test]
 fn read_interrupted() {
