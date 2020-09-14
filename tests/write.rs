@@ -110,10 +110,7 @@ fn writer_init_fail() {
         5,
         2,
         || Err::<&mut [u8], _>(e),
-        |writer| {
-            writer.write(b"let the cows come home")?;
-            Ok(())
-        },
+        |writer| writer.write(b"let the cows come home"),
     );
     if let Err(e) = res {
         assert_eq!(&format!("{}", e), "init err");
@@ -121,6 +118,18 @@ fn writer_init_fail() {
         panic!("init should fail");
     }
 }
+
+#[test]
+#[should_panic(expected = "init panic")]
+fn writer_init_panic() {
+    writer_init::<&mut Vec<u8>, _, _, _, _>(
+        5,
+        2,
+        || panic!("init panic"),
+        |writer| writer.write(b"let the cows come home"),
+    ).unwrap();
+}
+
 
 #[test]
 fn write_fail() {
