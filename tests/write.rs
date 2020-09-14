@@ -57,40 +57,14 @@ fn write_thread() {
     for channel_bufsize in (1..n).step_by(2) {
         for writer_bufsize in (1..n).step_by(2) {
             for queuelen in (1..n).step_by(2) {
-                // Test the writer: write without flushing, which should result in empty output
-                let w = writer_init_finish(
+                let mut w = Writer::new(false, false, writer_bufsize);
+                writer(
                     channel_bufsize,
                     queuelen,
-                    || Ok(Writer::new(false, false, writer_bufsize)),
+                    &mut w,
                     |w| w.write(text),
-                    |w| w,
                 )
-                .unwrap()
-                .1;
-                assert_eq!(w.data(), b"");
-
-                // Write with flushing: the output should be equal to the written data
-                let mut w = writer_init_finish(
-                    channel_bufsize,
-                    queuelen,
-                    || Ok(Writer::new(false, false, writer_bufsize)),
-                    |w| w.write(text),
-                    |mut w| {
-                        w.flush().unwrap();
-                        w
-                    },
-                )
-                .unwrap()
-                .1;
-                if w.data() != &text[..] {
-                    panic!(format!(
-                        "write test failed: {:?} != {:?} at channel buffer size {}, writer bufsize {}, queue length {}",
-                        String::from_utf8_lossy(w.data()), String::from_utf8_lossy(&text[..]),
-                        channel_bufsize, writer_bufsize, queuelen
-                    ));
-                }
-
-                w.flush().unwrap();
+                .expect("writing should not fail");
                 if w.data() != &text[..] {
                     panic!(format!(
                         "write test failed: {:?} != {:?} at channel buffer size {}, writer bufsize {}, queue length {}",
@@ -101,6 +75,42 @@ fn write_thread() {
             }
         }
     }
+}
+
+#[test]
+fn writer_flush() {
+    let text = b"was it written?";
+    let err_msg = "oops, it failed";
+    
+    // Write without flushing by returning an error after the write
+    let mut w = Writer::new(false, false, 1);
+    let res: Result<(), _> = writer(
+        1,
+        1,
+        &mut w,
+        |w| {
+            w.write(text).unwrap();
+            Err(io::Error::new(io::ErrorKind::Other, err_msg))
+        }
+    );
+    assert!(res.is_err());
+    assert!(w.data().is_empty());
+
+    // If flushing before the error, the data should be there.
+    let mut w = Writer::new(false, false, 1);
+    let res: Result<(), _> = writer(
+        1,
+        1,
+        &mut w,
+        |w| {
+            w.write(text).unwrap();
+            w.flush().unwrap();
+            w.write(b"rest not flushed!").unwrap();
+            Err(io::Error::new(io::ErrorKind::Other, err_msg))
+        }
+    );
+    assert!(res.is_err());
+    assert!(w.data() == text);
 }
 
 #[test]
@@ -139,6 +149,7 @@ fn write_fail() {
     for channel_bufsize in (1..n).step_by(2) {
         for writer_bufsize in (1..n).step_by(2) {
             for queuelen in (1..n).step_by(2) {
+                // Fail writing
                 let w = Writer::new(true, false, writer_bufsize);
                 let res = writer(channel_bufsize, queuelen, w, |w| w.write_all(text));
                 if let Err(e) = res {
@@ -147,6 +158,7 @@ fn write_fail() {
                     panic!("write should fail");
                 }
 
+                // Fail flushing
                 let w = Writer::new(false, true, writer_bufsize);
                 let res = writer(channel_bufsize, queuelen, w, |w| w.flush());
                 if let Err(e) = res {

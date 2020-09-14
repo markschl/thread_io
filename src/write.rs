@@ -96,6 +96,7 @@ impl Write for Writer {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        self.send_to_background()?;
         self.full_send.send(Message::Flush).ok();
         Ok(())
     }
@@ -303,7 +304,12 @@ where
             Ok(None)
         });
 
-        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| func(&mut writer)));
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let out = func(&mut writer)?;
+            // we always flush before returning
+            writer.flush()?;
+            Ok::<_, E>(out)
+        }));
 
         let writer_result = writer.done();
 

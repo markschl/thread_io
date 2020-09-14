@@ -17,32 +17,19 @@ fuzz_target!(|data: &[u8]| {
     let channel_bufsize = max(1, *channel_bufsize as usize / 4);
     let (queuelen, data) = data.split_first().unwrap();
     let queuelen = max(1, *queuelen as usize / 4);
-    // size of buffer we are reading into in main thread
+    // size of buffer we are writing into in main thread
     let (writer_bufsize, data) = data.split_first().unwrap();
     let writer_bufsize = max(1, *writer_bufsize as usize / 4);
 
-    // Test the writer: write without flushing, which should result in empty output
+    // Test writer
     let w = thread_io::write::writer_finish(channel_bufsize, queuelen,
         Writer::new(false, false, writer_bufsize),
         |w| w.write(data),
         |w| w
     ).unwrap().1;
-    assert_eq!(w.data(), b"");
-
-    // Write with flushing: the output should be equal to the written data
-    let mut w = thread_io::write::writer_finish(channel_bufsize, queuelen,
-        Writer::new(false, false, writer_bufsize),
-        |w| w.write(data),
-        |mut w| {
-            w.flush().unwrap();
-            w
-        }).unwrap().1;
     assert_eq!(w.data(), &data[..]);
 
-    w.flush().unwrap();
-    assert_eq!(w.data(), &data[..]);
-
-    // write fails
+    // Test case in which write fails
     let w = Writer::new(true, false, writer_bufsize);
     let res = thread_io::write::writer(channel_bufsize, queuelen, w, |w| w.write(data));
     if let Err(e) = res {
@@ -51,7 +38,7 @@ fuzz_target!(|data: &[u8]| {
         panic!("write should fail");
     }
 
-    // flush fails
+    // Test case in which flushing fails
     let w = Writer::new(false, true, writer_bufsize);
     let res = thread_io::write::writer(channel_bufsize, queuelen, w, |w| w.flush());
     if let Err(e) = res {
