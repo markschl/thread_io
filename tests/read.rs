@@ -171,10 +171,5 @@ fn reader_init_fail() {
 #[test]
 #[should_panic(expected = "init panic")]
 fn reader_init_panic() {
-    reader_init::<&[u8], _, _, _, _>(
-        5,
-        2,
-        || panic!("init panic"),
-        |_| Ok::<_, ()>(()),
-    ).unwrap();
+    reader_init::<&[u8], _, _, _, _>(5, 2, || panic!("init panic"), |_| Ok::<_, ()>(())).unwrap();
 }

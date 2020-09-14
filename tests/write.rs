@@ -58,13 +58,8 @@ fn write_thread() {
         for writer_bufsize in (1..n).step_by(2) {
             for queuelen in (1..n).step_by(2) {
                 let mut w = Writer::new(false, false, writer_bufsize);
-                writer(
-                    channel_bufsize,
-                    queuelen,
-                    &mut w,
-                    |w| w.write(text),
-                )
-                .expect("writing should not fail");
+                writer(channel_bufsize, queuelen, &mut w, |w| w.write(text))
+                    .expect("writing should not fail");
                 if w.data() != &text[..] {
                     panic!(format!(
                         "write test failed: {:?} != {:?} at channel buffer size {}, writer bufsize {}, queue length {}",
@@ -81,34 +76,24 @@ fn write_thread() {
 fn writer_flush() {
     let text = b"was it written?";
     let err_msg = "oops, it failed";
-    
+
     // Write without flushing by returning an error after the write
     let mut w = Writer::new(false, false, 1);
-    let res: Result<(), _> = writer(
-        1,
-        1,
-        &mut w,
-        |w| {
-            w.write(text).unwrap();
-            Err(io::Error::new(io::ErrorKind::Other, err_msg))
-        }
-    );
+    let res: Result<(), _> = writer(1, 1, &mut w, |w| {
+        w.write(text).unwrap();
+        Err(io::Error::new(io::ErrorKind::Other, err_msg))
+    });
     assert!(res.is_err());
     assert!(w.data().is_empty());
 
     // If flushing before the error, the data should be there.
     let mut w = Writer::new(false, false, 1);
-    let res: Result<(), _> = writer(
-        1,
-        1,
-        &mut w,
-        |w| {
-            w.write(text).unwrap();
-            w.flush().unwrap();
-            w.write(b"rest not flushed!").unwrap();
-            Err(io::Error::new(io::ErrorKind::Other, err_msg))
-        }
-    );
+    let res: Result<(), _> = writer(1, 1, &mut w, |w| {
+        w.write(text).unwrap();
+        w.flush().unwrap();
+        w.write(b"rest not flushed!").unwrap();
+        Err(io::Error::new(io::ErrorKind::Other, err_msg))
+    });
     assert!(res.is_err());
     assert!(w.data() == text);
 }
@@ -137,9 +122,9 @@ fn writer_init_panic() {
         2,
         || panic!("init panic"),
         |writer| writer.write(b"let the cows come home"),
-    ).unwrap();
+    )
+    .unwrap();
 }
-
 
 #[test]
 fn write_fail() {
