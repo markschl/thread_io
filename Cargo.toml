@@ -10,7 +10,7 @@ readme = "README.md"
 keywords = ["io", "thread", "concurrency"]
 
 [dependencies]
-crossbeam = "0.6"
+crossbeam = "0.7"
 
 [features]
 crossbeam_channel = []
