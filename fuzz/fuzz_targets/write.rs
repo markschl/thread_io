@@ -1,6 +1,5 @@
 #![no_main]
 #[macro_use] extern crate libfuzzer_sys;
-extern crate thread_io;
 
 use std::io::{self, Write};
 use std::cmp::{min, max};

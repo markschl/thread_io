@@ -1,5 +1,3 @@
-extern crate thread_io;
-
 use std::cmp::min;
 use std::io::{self, Read};
 use thread_io::read::*;

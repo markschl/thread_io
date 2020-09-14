@@ -8,6 +8,7 @@ repository = "https://github.com/markschl/thread_io"
 documentation = "https://docs.rs/thread_io"
 readme = "README.md"
 keywords = ["io", "thread", "concurrency"]
+edition = "2018"
 
 [dependencies]
 crossbeam = "0.7"

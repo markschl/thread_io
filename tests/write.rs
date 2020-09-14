@@ -1,5 +1,3 @@
-extern crate thread_io;
-
 use std::cmp::min;
 use std::io::{self, Write};
 use thread_io::write::*;
