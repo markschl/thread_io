@@ -14,3 +14,6 @@ crossbeam = "0.7"
 
 [features]
 crossbeam_channel = []
+
+[badges]
+travis = { repository = "https://travis-ci.org/markschl/thread_io" }
