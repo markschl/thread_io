@@ -5,6 +5,7 @@ set -ex
 cargo build --verbose
 cargo doc --verbose
 cargo test --verbose
+cargo test --features crossbeam_channel --verbose
 
 if [ "$TRAVIS_RUST_VERSION" = "stable" ]; then
   rustup component add rustfmt
