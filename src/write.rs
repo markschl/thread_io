@@ -1,4 +1,49 @@
 //! This module contains functions for writing in a background thread.
+//! 
+//! * The simplest to use is the [`writer`](fn.writer.html) function. It accepts
+//! any `io::Write` instance that implements `Send`.
+//! * The [`writer_init`](fn.writer_init.html) function handles cases where the 
+//! wrapped writer cannot be sent safely across the thread boundary by providing
+//! a closure for initializing the writer in the background thread.
+//! * [`writer_finish`](fn.writer_finish.html) and 
+//! [`writer_init_finish`](fn.writer_init_finish.html) provide an additional
+//! `finish` closure, which allows for executing final code after *all* writing
+//! finished or also for returning the wrapped writer to the main thread.
+//! 
+//! # Error handling
+//! 
+//! * `io::Error`s occurring during writing in the background are returned by 
+//!   the `write` method of the [writer in the main thread](struct.Writer.html)
+//!   as expected, but with a delay of at east one call.
+//! * The `func` closure running in the main thread allows returning errors of
+//!   any type. However, in contrast to the functions in the `read` module, the 
+//!   error needs to implement `From<io::Error>` because additional `write` 
+//!   calls can happen in the background **after** `func` is already finished,
+//!   and eventual errors have to be returned as well.
+//! * If an error is returned from `func` in the main thread, and around the
+//!   same time a writing error happens in the background thread, which does not
+//!   reach the main thread due to the reporting delay, the latter will be
+//!   discarded and the error from `func` returned instead.
+//!   Due to this, there is no guarantee on how much data is still written
+//!   after the custom error occurs.
+//! * *panics* in the background writer are correctly forwarded to the main
+//!   thread, but are also given lower priority if an error is returned from
+//!   `func`.
+//! 
+//! # Flushing
+//! 
+//! Trying to mimick the expected functionality of `io::Write` as closely as
+//! possible, the [writer](struct.Writer.html) provided in the `func` 
+//! closure in the main thread also forwards `flush()` calls to the background
+//! writer. `write` and `flush` calls are guaranteed to be in the same order as
+//! in the main thread. A `flush` call will always trigger the writer in the 
+//! main thread to send any buffered data to the background *before* the actual
+//! flushing is queued.
+//! 
+//! In addition, `flush()` is **always** called after all writing is done.
+//! It is assumed that usually no more data will be written after this, and a
+//! call to `flush()` ensures that that possible flushing errors don't go
+//! unnoticed like they would if the file is closed automatically when dropped.
 
 use std::io::{self, Write};
 use std::mem::replace;
@@ -154,18 +199,19 @@ impl BackgroundWriter {
     }
 }
 
-/// Sends `writer` to a background thread and provides another writer in the main thread, which
-/// then submits its data to the background writer.
+/// Sends `writer` to a background thread and provides another writer in the 
+/// main thread, which then submits its data to the background writer.
 ///
-/// The writer in the closure (`func`) fills buffers of a given size (`bufsize`) and submits
-/// them to the background writer through a channel. The queue length of the channel can
-/// be configured using the `queuelen` parameter (must be >= 1). As a consequence, errors will
-/// not be returned immediately, but after `queuelen` writes, or after writing is finished and
-/// the closure ends.
+/// The writer in the closure (`func`) fills buffers of a given size (`bufsize`) 
+/// and submits them to the background writer through a channel. The queue 
+/// length of the channel can be configured using the `queuelen` parameter (must
+/// be ≥ 1). As a consequence, errors will not be returned immediately, but
+/// after some delay, or after writing is finished and the closure ends.
 ///
-/// Also note that the last `write()` might be done **after** the closure has ended, calling
-/// `flush` within the closure is therefore too early. Flushing or other finalizing actions
-/// can be done in the `finish` closure supplied to `writer_finish()` or `writer_init_finish()`.
+/// Also note that the last `write()` in the background can happen **after** the 
+/// closure has ended. Finalizing actions should be done in the `finish` closure
+/// supplied to [`writer_finish`](fn.writer_finish.html) or 
+/// [`writer_init_finish`](fn.writer_init_finish.html).
 ///
 /// # Example:
 ///
@@ -191,8 +237,9 @@ where
     writer_init(bufsize, queuelen, || Ok(writer), func)
 }
 
-/// Like `writer()`, but the wrapped writer is initialized using a closure  (`init_writer()`)
-/// in the background thread. This allows using writers that don't implement `Send`
+/// Like [`writer`](fn.writer.html), but the wrapped writer is initialized in a 
+/// closure (`init_writer()`) in the background thread. This allows using
+/// writers that don't implement `Send`.
 ///
 /// # Example:
 ///
@@ -223,14 +270,13 @@ where
     writer_init_finish(bufsize, queuelen, init_writer, func, |_| ()).map(|(o, _)| o)
 }
 
-/// Like `writer`, but accepts another closure taking the wrapped writer by value before it
-/// goes out of scope (if there is no error). Useful for performing finalizing actions such
-/// as flusing, or calling a `finish()` function, required by many encoders for compressed data.
+/// Like `writer`, but accepts another closure taking the wrapped writer by
+/// value before it goes out of scope (and there is no error).
+/// Useful for performing finalizing actions or returning the wrapped writer to
+/// the main thread (if it implements `Send`).
 ///
-/// If the writer implements `Send`, it is also possible to return the wrapped writer back to the
-/// main thread.
-///
-/// The output values of `func` and the `finish` closure are returned in a tuple.
+/// The output values of `func` and the `finish` closure are returned in a
+/// tuple.
 ///
 /// # Example:
 ///
@@ -266,10 +312,13 @@ where
     writer_init_finish(bufsize, queuelen, || Ok(writer), func, finish)
 }
 
-/// This method takes both an initializing closure (see `writer_init`) and one for finalizing
-/// and returning data back to the main thread (see `writer_finish`).alloc
+/// This method takes both an initializing closure (see 
+/// [`writer_init`](fn.writer_init.html)), and a closure for finalizing or
+/// returning data back to the main thread (see 
+/// [`writer_finish`](fn.writer_finish.html)).
 ///
-/// The output values of `func` and the `finish` closure are returned as a tuple.
+/// The output values of `func` and the `finish` closure are returned as a
+/// tuple.
 pub fn writer_init_finish<W, I, F, O, F2, O2, E>(
     bufsize: usize,
     queuelen: usize,
@@ -315,10 +364,11 @@ where
 
         let handle = handle.join();
 
-        // Prefer errors from the background thread. This doesn't include actual I/O errors from the writing
-        // because those are sent via the channel to the main thread. Instead, it returns errors from init_writer
-        // or panics from the writing thread. If either of those happen, writing in the main thread will fail
-        // but we want to return the underlying reason.
+        // Prefer errors from the background thread. This doesn't include actual
+        // I/O errors from the writing because those are sent via the channel to
+        // the main thread. Instead, it returns errors from init_writer or 
+        // panics from the writing thread. If either of those happen, writing in
+        // the main thread will fail but we want to return the underlying reason.
         let of = crate::unwrap_or_resume_unwind(handle)?;
         let out = crate::unwrap_or_resume_unwind(out)?;
 
