@@ -52,11 +52,11 @@ impl Write for Writer {
 #[test]
 fn write_thread() {
     let text = b"The quick brown fox jumps over the lazy dog";
-    let len = text.len();
+    let n = text.len() + 3;
 
-    for channel_bufsize in 1..len {
-        for writer_bufsize in 1..len {
-            for queuelen in 1..len {
+    for channel_bufsize in (1..n).step_by(2) {
+        for writer_bufsize in (1..n).step_by(2) {
+            for queuelen in (1..n).step_by(2) {
                 // Test the writer: write without flushing, which should result in empty output
                 let w = writer_init_finish(
                     channel_bufsize,
@@ -125,11 +125,11 @@ fn writer_init_fail() {
 #[test]
 fn write_fail() {
     let text = b"The quick brown fox jumps over the lazy dog";
-    let len = text.len();
+    let n = text.len() + 3;
 
-    for channel_bufsize in 1..len {
-        for writer_bufsize in 1..len {
-            for queuelen in 1..len {
+    for channel_bufsize in (1..n).step_by(2) {
+        for writer_bufsize in (1..n).step_by(2) {
+            for queuelen in (1..n).step_by(2) {
                 let w = Writer::new(true, false, writer_bufsize);
                 let res = writer(channel_bufsize, queuelen, w, |w| w.write_all(text));
                 if let Err(e) = res {

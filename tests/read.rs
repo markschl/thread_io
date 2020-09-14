@@ -60,12 +60,12 @@ fn read_chunks<R: io::Read>(mut rdr: R, chunksize: usize) -> io::Result<Vec<u8>>
 #[test]
 fn read() {
     let text = b"The quick brown fox";
-    let len = text.len();
+    let n = text.len() + 3;
 
-    for channel_bufsize in 1..len {
-        for rdr_block_size in 1..len {
-            for out_bufsize in 1..len {
-                for queuelen in 1..len {
+    for channel_bufsize in (1..n).step_by(2) {
+        for rdr_block_size in (1..n).step_by(2) {
+            for out_bufsize in (1..n).step_by(2) {
+                for queuelen in (1..n).step_by(2) {
                     // test the mock reader itself
                     let rdr = Reader::new(text, rdr_block_size, ::std::usize::MAX, false);
                     assert_eq!(read_chunks(rdr, out_bufsize).unwrap().as_slice(), &text[..]);
