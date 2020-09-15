@@ -116,8 +116,8 @@ writer(
         while buf_infile.read_line(&mut line)? > 0 {
             if line.contains(search_term) {
                 writer.write(line.as_bytes()).expect("write error");
-                line.clear();
             }
+            line.clear();
         }
         Ok::<_, io::Error>(())
     },
@@ -131,25 +131,18 @@ with *non-Send* writer types can be found in the documentation of the
 [write module](https://docs.rs/thread_io/latest/thread_io/write).
 
 After `func` returns, the background writer *always* calls 
-`io::Write::flush`, making sure that possible errors when writing remaining
-buffered data to the target. With `File`, it is still possible that errors
-occurring when syncing OS level buffers to file
-[are not caught](https://github.com/rust-lang/rust/issues/32255). This can be
-ensured by calling `File::sync_data` *after* the call to 
-`thread_io::write::writer` or in the `finish` closure of 
-`thread_io::write::writer_finish` or `thread_io::write::writer_init_finish`.
+`io::Write::flush`, making sure that possible flushing errors are caught before
+the file goes out of scope.
 
 ## Notes on errors
 
-Two types of errors may occur when using `thread_io::read::reader` and 
-`thread_io::write::writer`:
+Two types of errors may occur when using the readers and writers of this crate:
 
-* **`io::Error`** if the underlying reader fails in a `io::Read::read`
-  or `io::Write::write` call. This error cannot be returned *instantly*,
-  instead it is pushed to a queue and will be returned in a subsequent read or
-  write call. The delay depends on the `queuelen` parameter of the reading / 
-  writing and also on the `bufsize` parameter and the size of the reading /
-  writing buffer.
+* **`io::Error`** returned from `io::Read::read` / `io::Write::write` calls.
+  This error cannot be returned *instantly*, instead it is pushed to a queue and
+  will be returned in a subsequent read or write call. The delay depends on the
+  `queuelen` parameter of the reading / writing functions, but also on the 
+  `bufsize` parameter and the size of the reading / writing buffer.
 * The `func` closure allows returning **custom errors** of any type, which may 
   occur in the user program *after* reading from the background reader or 
   *before* writing to the background writer. With the `thread_io` writer, there 
@@ -159,21 +152,25 @@ Two types of errors may occur when using `thread_io::read::reader` and
 Both with reading and writing, custom user errors are prioritized over eventual
 `io::Error`s.
 For example, it is possible that while parsing a file, a syntax error occurs,
-which the programmer returns from the `func` closure. Around the same time, also
-`io::Error` occurs, e.g. because the GZIP file is truncated. If this error
-is still in the queue, waiting to be reported when the syntax error occurs, the
-syntax error will be returned.
+which the programmer returns from the `func` closure. Around the same time,
+`io::Error` may occur as well, e.g. because the GZIP file is truncated. If this
+error is still in the queue waiting to be reported as the syntax error happens,
+ultimately the syntax error will be returned and the `io::Error` discarded.
 
 After the func closure ends (with or without an error), a signal is placed in
 a queue telling the background thread to stop processing. However, `queuelen` 
 reads or writes will be done before processing ultimately stops.
 
+More details on error handling are found in the documentation of the 
+[read](https://docs.rs/thread_io/latest/thread_io/read) and
+[write](https://docs.rs/thread_io/latest/thread_io/write) modules.
+
 ## Crossbeam channels
 
 It is possible to use 
 [the channel implementation from the crossbeam crate](https://docs.rs/crossbeam/latest/crossbeam/channel/index.html)
-by specifying the `crossbeam_channel` feature. However, on my system, I haven't
-found any performance gain over using the channels from the standard library.
+by specifying the `crossbeam_channel` feature. The few tests I have done didn't
+show any performance gain over using the channels from the standard library.
 
 ## Similar projects
 

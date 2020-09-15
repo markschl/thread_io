@@ -8,7 +8,7 @@
 //!
 //! # Error handling
 //!
-//! * `io::Error`s occurring during reading in the background are returned by
+//! * `io::Error`s occuring during reading in the background are returned by
 //!   the `read` method of the [reader in the main thread](struct.Reader.html)
 //!   as expected, but with a delay of at east one call.
 //! * Reading errors cause the background reader to stop, *except* for errors

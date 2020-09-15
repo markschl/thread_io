@@ -7,8 +7,11 @@
 //! a closure for initializing the writer in the background thread.
 //! * [`writer_finish`](fn.writer_finish.html) and
 //! [`writer_init_finish`](fn.writer_init_finish.html) provide an additional
-//! `finish` closure, which allows for executing final code after *all* writing
-//! finished or also for returning the wrapped writer to the main thread.
+//! `finish` closure, which allows for executing final code after all writing is
+//! done, or also for returning the wrapped writer to the main thread. Usually,
+//! `write` calls happen in the background even *after* `func` returned,
+//! finalizing code should thus *always* go after the `writer...()` function
+//! call or be placed in the `finish` closure (useful for non-`Send` writers).
 //!
 //! # Error handling
 //!
@@ -18,7 +21,7 @@
 //! * The `func` closure running in the main thread allows returning errors of
 //!   any type. However, in contrast to the functions in the `read` module, the
 //!   error needs to implement `From<io::Error>` because additional `write`
-//!   calls can happen in the background **after** `func` is already finished,
+//!   calls can happen in the background *after* `func` is already finished,
 //!   and eventual errors have to be returned as well.
 //! * If an error is returned from `func` in the main thread, and around the
 //!   same time a writing error happens in the background thread, which does not
@@ -44,6 +47,11 @@
 //! It is assumed that usually no more data will be written after this, and a
 //! call to `flush()` ensures that that possible flushing errors don't go
 //! unnoticed like they would if the file is closed automatically when dropped.
+//! With `File`, it is still possible that when going out of scope, unreported
+//! errors occur when writing OS-internal metadata. To address this,
+//! `File::sync_all` or `File::sync_data` can be called after the `writer`
+//! call finished, or in the case of non-`Send` writers in the `finish` closure
+//! of `writer_finish` / `writer_init_finish`.
 
 use std::io::{self, Write};
 use std::mem::replace;
