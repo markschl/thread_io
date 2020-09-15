@@ -1,13 +1,11 @@
 
 [package]
 name = "thread_io-fuzz"
-version = "0.2"
+version = "0.0.2"
 authors = ["markschl <markschl19@gmail.com>"]
 publish = false
 edition = "2018"
-
-[package.metadata]
-cargo-fuzz = true
+metadata = { cargo-fuzz = true }
 
 [dependencies]
 thread_io = { path = ".." }
