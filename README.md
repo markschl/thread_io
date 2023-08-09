@@ -17,6 +17,8 @@ writer.
 
 **[Writer API documentation](https://docs.rs/thread_io/latest/thread_io/write)**
 
+The minimum Rust version is *1.38.0*.
+
 ## Examples
 
 ### Reading
