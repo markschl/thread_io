@@ -60,7 +60,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: nightly
           components: clippy
       - name: Clippy check
         run: cargo clippy --all-targets
