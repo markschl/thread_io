@@ -163,7 +163,7 @@ fn read_fail_processing() {
     let res: Result<(), &'static str> = reader(1, 1, rdr, |_r| Err("gave up"));
 
     if let Err(e) = res {
-        assert_eq!(&format!("{}", e), "gave up");
+        assert_eq!(&e.to_string(), "gave up");
     } else {
         panic!("read should fail");
     }
