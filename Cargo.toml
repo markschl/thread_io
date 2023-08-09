@@ -11,7 +11,8 @@ keywords = ["io", "thread", "concurrency"]
 edition = "2018"
 
 [dependencies]
-crossbeam = "0.8"
+crossbeam-channel = "0.5"
+crossbeam-utils = "0.8"
 
 [features]
 crossbeam_channel = []

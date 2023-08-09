@@ -57,11 +57,9 @@ use std::io::{self, Write};
 use std::mem::replace;
 
 #[cfg(feature = "crossbeam_channel")]
-use crossbeam::channel::{unbounded as channel, Receiver, Sender};
+use crossbeam_channel::{unbounded as channel, Receiver, Sender};
 #[cfg(not(feature = "crossbeam_channel"))]
 use std::sync::mpsc::{channel, Receiver, Sender};
-
-use crossbeam;
 
 #[derive(Debug)]
 enum Message {
@@ -349,7 +347,7 @@ where
     let mut writer = Writer::new(empty_recv, full_send, bufsize);
     let mut background_writer = BackgroundWriter::new(full_recv, empty_send, bufsize, queuelen);
 
-    crossbeam::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         let handle = scope.spawn::<_, Result<_, E>>(move |_| {
             let mut inner = init_writer()?;
             if background_writer.listen(&mut inner) {

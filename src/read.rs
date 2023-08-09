@@ -23,12 +23,10 @@
 //!   `func`.
 
 #[cfg(feature = "crossbeam_channel")]
-use crossbeam::channel::{unbounded as channel, Receiver, Sender};
+use crossbeam_channel::{unbounded as channel, Receiver, Sender};
 use std::io::{self, Cursor, Read};
 #[cfg(not(feature = "crossbeam_channel"))]
 use std::sync::mpsc::{channel, Receiver, Sender};
-
-use crossbeam;
 
 #[derive(Debug)]
 struct Buffer {
@@ -260,7 +258,7 @@ where
     let mut reader = Reader::new(full_recv, empty_send, bufsize, queuelen);
     let mut background_reader = BackgroundReader::new(empty_recv, full_send);
 
-    crossbeam::scope(|scope| {
+    crossbeam_utils::thread::scope(|scope| {
         let handle = scope.spawn(move |_| {
             let mut inner = init_reader()?;
             background_reader.serve(&mut inner);
