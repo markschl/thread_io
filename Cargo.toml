@@ -1,6 +1,6 @@
 [package]
 name = "thread_io"
-version = "0.3.0"
+version = "0.3.1"
 rust-version = "1.38"
 authors = ["markschl <markschl19@gmail.com>"]
 description = "Crate for performing I/O in background thread"
