@@ -17,9 +17,9 @@ impl Writer {
         Writer {
             cache: vec![],
             data: vec![],
-            write_fails: write_fails,
-            flush_fails: flush_fails,
-            bufsize: bufsize,
+            write_fails,
+            flush_fails,
+            bufsize,
         }
     }
 
@@ -59,11 +59,11 @@ fn write_thread() {
                 writer(channel_bufsize, queuelen, &mut w, |w| w.write(text))
                     .expect("writing should not fail");
                 if w.data() != &text[..] {
-                    panic!(format!(
+                    panic!(
                         "write test failed: {:?} != {:?} at channel buffer size {}, writer bufsize {}, queue length {}",
                         String::from_utf8_lossy(w.data()), String::from_utf8_lossy(&text[..]),
                         channel_bufsize, writer_bufsize, queuelen
-                    ));
+                    );
                 }
             }
         }
@@ -78,7 +78,7 @@ fn writer_flush() {
     // Write without flushing by returning an error after the write
     let mut w = Writer::new(false, false, 1);
     let res: Result<(), _> = writer(1, 1, &mut w, |w| {
-        w.write(text).unwrap();
+        w.write_all(text).unwrap();
         Err(io::Error::new(io::ErrorKind::Other, err_msg))
     });
     assert!(res.is_err());
@@ -87,9 +87,9 @@ fn writer_flush() {
     // If flushing before the error, the data should be there.
     let mut w = Writer::new(false, false, 1);
     let res: Result<(), _> = writer(1, 1, &mut w, |w| {
-        w.write(text).unwrap();
+        w.write_all(text).unwrap();
         w.flush().unwrap();
-        w.write(b"rest not flushed!").unwrap();
+        w.write_all(b"rest not flushed!").unwrap();
         Err(io::Error::new(io::ErrorKind::Other, err_msg))
     });
     assert!(res.is_err());

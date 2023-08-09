@@ -8,7 +8,7 @@ use std::io::{Cursor, ErrorKind, Read};
 
 fn get_data(len: usize) -> Vec<u8> {
     b"The quick brown fox jumps over the lazy dog"
-        .into_iter()
+        .iter()
         .cycle()
         .take(len)
         .cloned()
@@ -57,7 +57,7 @@ macro_rules! bench_native {
                         if e.kind() == ErrorKind::UnexpectedEof {
                             break;
                         } else {
-                            panic!(e);
+                            panic!("{}", e);
                         }
                     }
                 }

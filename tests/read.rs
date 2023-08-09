@@ -21,11 +21,11 @@ impl<'a> Reader<'a> {
         panic: bool,
     ) -> Reader {
         Reader {
-            data: data,
-            block_size: block_size,
+            data,
+            block_size,
             fails_after: fails_after.unwrap_or(usize::max_value()),
             interrups_after: interrups_after.unwrap_or(usize::max_value()),
-            panic: panic,
+            panic,
         }
     }
 }
@@ -101,10 +101,10 @@ fn read() {
                     .unwrap();
 
                     if out.as_slice() != &text[..] {
-                        panic!(format!(
+                        panic!(
                             "left != right at channel bufsize: {}, reader bufsize: {}, final reader bufsize {}, queue length: {}\nleft:  {:?}\nright: {:?}",
                             channel_bufsize, rdr_block_size, out_bufsize, queuelen, &out, &text[..]
-                        ));
+                        );
                     }
                 }
             }
@@ -135,10 +135,10 @@ fn read_fail() {
             if let Err(e) = res {
                 assert_eq!(&format!("{}", e), "read err");
             } else {
-                panic!(format!(
+                panic!(
                     "read should fail at bufsize: {}, queue length: {}",
                     channel_bufsize, queuelen
-                ));
+                );
             }
         }
     }

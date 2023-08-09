@@ -139,10 +139,8 @@ impl Write for Writer {
         while written < buffer.len() {
             let n = self.buffer.write(&buffer[written..])?;
             written += n;
-            if n == 0 {
-                if !self.send_to_background()? {
-                    break;
-                }
+            if n == 0 && !self.send_to_background()? {
+                break;
             }
         }
         Ok(written)

@@ -8,7 +8,7 @@ use std::io::{sink, Write};
 
 fn get_data(len: usize) -> Vec<u8> {
     b"The quick brown fox jumps over the lazy dog"
-        .into_iter()
+        .iter()
         .cycle()
         .take(len)
         .cloned()
